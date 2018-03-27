@@ -1,26 +1,5 @@
 #include "APC.h"
 
-
-ULONG oldBeg = 0;
-ULONG oldEnd = 0;
-
-
-//APC读写进程内存，可过DXF
-#define MALLOC_NPP(_s)        ExAllocatePool(NonPagedPool, _s)
-#define FREE(_p)        ExFreePool(_p)
-
-
-
-typedef struct _RWPM_INFO
-{
-	void* Address;
-	void* Buffer;
-	SIZE_T Length;
-	SIZE_T Type;//0=read;1=write
-	KEVENT Event;
-}RWPM_INFO, *PRWPM_INFO;
-
-
 PETHREAD LookupThread(HANDLE Tid)
 {
 	PETHREAD ethread;
@@ -43,14 +22,14 @@ PEPROCESS LookupProcess(HANDLE pid)
 PEPROCESS GetProcessByName(UCHAR* ProcessName) 
 {
 	ULONG i = 0;
-
+	UCHAR szName[16] = { 0 };
 	//从4到2^18开始枚举进程,步进为4
 	for (i = 4; i <= 262144; i += 4)
 	{
 		PEPROCESS process = LookupProcess((HANDLE)i);
 		if (process != NULL)
 		{
-			if (strcmp((const char*)ProcessName, (const char*)PsGetProcessImageFileName(process)) == 0)
+			if (strcmp(ProcessName, PsGetProcessImageFileName(process)) == NULL)
 			{
 				return process;
 			}
@@ -61,185 +40,46 @@ PEPROCESS GetProcessByName(UCHAR* ProcessName)
 	
 }
 
-//APC函数体
-VOID GetDxfRealCr3Apc(PKAPC pApc, ULONG64 *NormalRoutine, PVOID *NormalContext, PVOID *SystemArgument1, PVOID *SystemArgument2)
-{
-	UNREFERENCED_PARAMETER(NormalRoutine);
-	UNREFERENCED_PARAMETER(NormalContext);
-	UNREFERENCED_PARAMETER(SystemArgument1);
-	UNREFERENCED_PARAMETER(SystemArgument2);
 
-	PRWPM_INFO pInfo = (PRWPM_INFO)(pApc->NormalContext);
-	
+
+//UserAPC函数体
+VOID UsrtAPCFuntion(PKAPC pApc, ULONG64 *NormalRoutine, PVOID *NormalContext, PVOID *SystemArgument1, PVOID *SystemArgument2)
+{
+	__debugbreak();
+	PRWPM_INFO pInfo = 0;
 	__try
 	{
-		DbgPrint("APC例程执行,当前进程:%s\n", PsGetProcessImageFileName(PsGetCurrentProcess()));
-		
-		RtlCopyMemory(pInfo->Buffer, pInfo->Address, pInfo->Length);
-
-		ULONG64 cr3 = __readcr3();
-	
-		RtlCopyMemory(pInfo->Buffer,&cr3, pInfo->Length);
+		pInfo = (PRWPM_INFO)(pApc->NormalContext);
+		DbgPrint("用户模式APC\n");
 	}
 	__except (1)
 	{
-		;
+		DbgPrint("异常\n");
 	}
-	pInfo->Type = 2;
-	KeSetEvent(&(pInfo->Event), IO_NO_INCREMENT, FALSE);
-	ExFreePool(pApc);
-}
-
-
-//APC函数体3
-VOID RestoreDateApc(PKAPC pApc, ULONG64 *NormalRoutine, PVOID *NormalContext, PVOID *SystemArgument1, PVOID *SystemArgument2)
-{
-	UNREFERENCED_PARAMETER(NormalRoutine);
-	UNREFERENCED_PARAMETER(NormalContext);
-	UNREFERENCED_PARAMETER(SystemArgument1);
-	UNREFERENCED_PARAMETER(SystemArgument2);
-	PRWPM_INFO pInfo = (PRWPM_INFO)(pApc->NormalContext);
-
-	__try
-	{
-		RtlCopyMemory(pInfo->Buffer, pInfo->Address, pInfo->Length);
-	
-		PULONG base = (PULONG)0x100100;
-		//0冰冻  1骷髅
-		*base = 0;
-		//伤害100104
-		*(base + 1) = 0;
-		//范围100108
-		*(base + 2) = 0;
-		//频率10010c
-		*(base + 3) = 0;
-		//时间100110
-		*(base + 4) = 0;
-		//几率100114
-		*(base + 5) = 0;
-		//冰冻等级100118
-		*(base + 6) = 0;
-		//伤害倍数10011c
-		*(base + 7) = 0;
-
-		//人物基址
-		ULONG RoleBase = 0x044D39B0;
-		//物品栏偏移
-		ULONG offset1 = 0x6118;
-		//不变
-		ULONG offset2 = 0x58;
-		//物品栏1偏移
-		ULONG offset3 = 0xc;
-
-		//冰冻开始
-		ULONG offset4 = 0xb54;
-		//冰冻结束
-		ULONG offset5 = 0xb58;
-
-
-		*(PULONG)((*(PULONG)((*(PULONG)((*(PULONG)((*(PULONG)RoleBase) + offset1)) + offset2)) + offset3)) + offset4) = oldBeg;
-		*(PULONG)((*(PULONG)((*(PULONG)((*(PULONG)((*(PULONG)RoleBase) + offset1)) + offset2)) + offset3)) + offset5) = oldEnd;
-
-		ULONG64 cr3 = __readcr3();
-		
-		RtlCopyMemory(pInfo->Buffer, &cr3, pInfo->Length);
-	}
-	__except (1)
-	{
-		;
-	}
-	pInfo->Type = 2;
-	KeSetEvent(&(pInfo->Event), IO_NO_INCREMENT, FALSE);
-	ExFreePool(pApc);
-}
-
-
-//APC函数体3
-VOID ThreeSApc(PKAPC pApc, ULONG64 *NormalRoutine, PVOID *NormalContext, PVOID *SystemArgument1, PVOID *SystemArgument2)
-{
-	UNREFERENCED_PARAMETER(NormalRoutine);
-	UNREFERENCED_PARAMETER(NormalContext);
-	UNREFERENCED_PARAMETER(SystemArgument1);
-	UNREFERENCED_PARAMETER(SystemArgument2);
-
-	PRWPM_INFO pInfo = (PRWPM_INFO)(pApc->NormalContext);
-
-	__try
-	{
-		RtlCopyMemory(pInfo->Buffer, pInfo->Address, pInfo->Length);
-
-		//评分基址
-		PULONG base = (PULONG)0x043C56AC;
-		//评分偏移
-		ULONG offset = 0x110;
-
-		*(PULONG)((*base) + offset) = 9999999;
-
-		ULONG64 cr3 = __readcr3();
-
-		RtlCopyMemory(pInfo->Buffer, &cr3, pInfo->Length);
-	}
-	__except (1)
-	{
-		;
-	}
-	pInfo->Type = 2;
 	KeSetEvent(&(pInfo->Event), IO_NO_INCREMENT, FALSE);
 	ExFreePool(pApc);
 }
 
 //APC函数体
-VOID ReadWriteProcessMemoryApc(PKAPC pApc, ULONG64 *NormalRoutine, PVOID *NormalContext, PVOID *SystemArgument1, PVOID *SystemArgument2)
+VOID APCFuntion(PKAPC pApc, ULONG64 *NormalRoutine, PVOID *NormalContext, PVOID *SystemArgument1, PVOID *SystemArgument2)
 {
-	UNREFERENCED_PARAMETER(NormalRoutine);
-	UNREFERENCED_PARAMETER(NormalContext);
-	UNREFERENCED_PARAMETER(SystemArgument1);
-	UNREFERENCED_PARAMETER(SystemArgument2);
-
 	PRWPM_INFO pInfo = (PRWPM_INFO)(pApc->NormalContext);
-
-	if (pInfo->Type == 0)
+	__try
 	{
-		__try
-		{
-			/*DbgPrint("APC例程执行,当前进程:%s\n", PsGetProcessImageFileName(PsGetCurrentProcess()));
-			ULONG64 cr3 = __readcr3();
-			DbgPrint("cr3:%llx,DirPageTable:%llx\n", cr3, *(PULONG64)((ULONG64)PsGetCurrentProcess() + 0x28));*/
-
-			RtlCopyMemory(pInfo->Buffer, pInfo->Address, pInfo->Length);
-
-			/*DbgPrint("APC例程执行,当前进程:%s\n", PsGetProcessImageFileName(PsGetCurrentProcess()));
-			cr3 = __readcr3();
-			*(PULONG64)((ULONG64)PsGetCurrentProcess() + 0x28) = cr3;
-			DbgPrint("cr3:%llx,DirPageTable:%llx\n", cr3, *(PULONG64)((ULONG64)PsGetCurrentProcess() + 0x28));*/
-		}
-		__except (1)
-		{
-			;
-		}
+		DbgPrint("APC函数运行中\n");
+		ULONG temp = *(ULONG*)0x00400000;
+		((PFUNCTION)pInfo->fun)();
 	}
-	else
+	__except (1)
 	{
-		__try
-		{
-			_disable();
-			__writecr0(__readcr0() & 0xfffffffffffeffff);
-			RtlCopyMemory(pInfo->Address, pInfo->Buffer, pInfo->Length);
-			__writecr0(__readcr0() | 0x10000);
-			_enable();
-		}
-		__except (1)
-		{
-			;
-		}
+		;
 	}
-	pInfo->Type = 2;
 	KeSetEvent(&(pInfo->Event), IO_NO_INCREMENT, FALSE);
 	ExFreePool(pApc);
 }
 
 //插入APC
-NTSTATUS InsertReadWriteProcessMemoryApc(PETHREAD Thread, PRWPM_INFO pInfo)
+NTSTATUS InsertKernelApc(PETHREAD Thread, PRWPM_INFO pInfo)
 {
 	NTSTATUS st = STATUS_UNSUCCESSFUL;
 	PKAPC pApc = 0;
@@ -249,11 +89,12 @@ NTSTATUS InsertReadWriteProcessMemoryApc(PETHREAD Thread, PRWPM_INFO pInfo)
 		if (pApc)
 		{
 			LARGE_INTEGER interval = { 0 };
-			//APC初始化
+
+			//APC初始化,内核模式
 			KeInitializeApc(pApc,
 				Thread,	//插入的线程
 				OriginalApcEnvironment,
-				(ULONG64)ReadWriteProcessMemoryApc,  //APC函数
+				APCFuntion,  //APC函数
 				0, 0, KernelMode, 0);
 
 			pApc->NormalContext = pInfo;
@@ -274,23 +115,33 @@ NTSTATUS InsertReadWriteProcessMemoryApc(PETHREAD Thread, PRWPM_INFO pInfo)
 	return st;
 }
 
-//插入APC2
-NTSTATUS InsertGetDxfRealCr3Apc(PETHREAD Thread, PRWPM_INFO pInfo)
+//插入用户层APC
+NTSTATUS InsertUserApc(PETHREAD Thread, PRWPM_INFO pInfo,ULONG64 pUserApc)
 {
 	NTSTATUS st = STATUS_UNSUCCESSFUL;
 	PKAPC pApc = 0;
+	PVOID userAocAddr = 0;
+
+	DbgPrint("pUserApc:%llx\n", pUserApc);
+	userAocAddr = (~pUserApc + 1) << 2;
+	DbgPrint("userAocAddr:%llx\n", userAocAddr);
 	if (MmIsAddressValid(Thread))
 	{
 		pApc = MALLOC_NPP(sizeof(KAPC));
 		if (pApc)
 		{
 			LARGE_INTEGER interval = { 0 };
-			//APC初始化
+
+			//APC初始化,内核模式
 			KeInitializeApc(pApc,
 				Thread,	//插入的线程
 				OriginalApcEnvironment,
-				(ULONG64)GetDxfRealCr3Apc,  //APC函数
-				0, 0, KernelMode, 0);
+				UsrtAPCFuntion,  //APC函数
+				0,
+				userAocAddr,//用户层APC地址
+				UserMode,//用户模式
+				0	//参数
+			);
 
 			pApc->NormalContext = pInfo;
 			KeInitializeEvent(&(pInfo->Event), NotificationEvent, TRUE);
@@ -300,92 +151,28 @@ NTSTATUS InsertGetDxfRealCr3Apc(PETHREAD Thread, PRWPM_INFO pInfo)
 				interval.QuadPart = -10000;//DELAY_ONE_MILLISECOND;
 				interval.QuadPart *= 1000;
 				st = KeWaitForSingleObject(&(pInfo->Event), Executive, KernelMode, 0, &interval);
+				DbgPrint("KeInsertQueueAp成功c\n");
 			}
 			else
 			{
 				ExFreePool(pApc);
+				DbgPrint("KeInsertQueueAp失败c\n");
 			}
 		}
 	}
 	return st;
 }
 
-//插入APC3
-NTSTATUS InsertRestoreDateApc(PETHREAD Thread, PRWPM_INFO pInfo)
-{
-	NTSTATUS st = STATUS_UNSUCCESSFUL;
-	PKAPC pApc = 0;
-	if (MmIsAddressValid(Thread))
-	{
-		pApc = MALLOC_NPP(sizeof(KAPC));
-		if (pApc)
-		{
-			LARGE_INTEGER interval = { 0 };
-			//APC初始化
-			KeInitializeApc(pApc,
-				Thread,	//插入的线程
-				OriginalApcEnvironment,
-				(ULONG64)RestoreDateApc,  //APC函数
-				0, 0, KernelMode, 0);
-
-			pApc->NormalContext = pInfo;
-			KeInitializeEvent(&(pInfo->Event), NotificationEvent, TRUE);
-			KeClearEvent(&(pInfo->Event));
-			if (KeInsertQueueApc(pApc, 0, 0, 0))
-			{
-				interval.QuadPart = -10000;//DELAY_ONE_MILLISECOND;
-				interval.QuadPart *= 1000;
-				st = KeWaitForSingleObject(&(pInfo->Event), Executive, KernelMode, 0, &interval);
-			}
-			else
-			{
-				ExFreePool(pApc);
-			}
-		}
-	}
-	return st;
-}
-
-//插入APC4
-NTSTATUS InsertThreeSApc(PETHREAD Thread, PRWPM_INFO pInfo)
-{
-	NTSTATUS st = STATUS_UNSUCCESSFUL;
-	PKAPC pApc = 0;
-	if (MmIsAddressValid(Thread))
-	{
-		pApc = MALLOC_NPP(sizeof(KAPC));
-		if (pApc)
-		{
-			LARGE_INTEGER interval = { 0 };
-			//APC初始化
-			KeInitializeApc(pApc,
-				Thread,	//插入的线程
-				OriginalApcEnvironment,
-				(ULONG64)ThreeSApc,  //APC函数
-				0, 0, KernelMode, 0);
-
-			pApc->NormalContext = pInfo;
-			KeInitializeEvent(&(pInfo->Event), NotificationEvent, TRUE);
-			KeClearEvent(&(pInfo->Event));
-			if (KeInsertQueueApc(pApc, 0, 0, 0))
-			{
-				interval.QuadPart = -10000;//DELAY_ONE_MILLISECOND;
-				interval.QuadPart *= 1000;
-				st = KeWaitForSingleObject(&(pInfo->Event), Executive, KernelMode, 0, &interval);
-			}
-			else
-			{
-				ExFreePool(pApc);
-			}
-		}
-	}
-	return st;
-}
-
-BOOLEAN ForceReadProcessMemory2(IN PEPROCESS Process, IN PVOID Address, IN UINT32 Length, OUT PVOID Buffer)
+BOOLEAN ExecFun(PFUNCTION pfun)
 {
 	ULONG i;
 	BOOLEAN b = 0;
+	PEPROCESS Process = GetProcessByName("dnf.exe");
+	if (Process == NULL)
+	{
+		DbgPrint("未找到DNF进程\n");
+		return FALSE;
+	}
 	for (i = 4; i < 1048576; i = i + 4)
 	{
 		PETHREAD ethrd = LookupThread((HANDLE)i);
@@ -396,11 +183,8 @@ BOOLEAN ForceReadProcessMemory2(IN PEPROCESS Process, IN PVOID Address, IN UINT3
 			if (eproc == Process)
 			{
 				PRWPM_INFO pInfo = MALLOC_NPP(sizeof(RWPM_INFO));
-				pInfo->Address = Address;
-				pInfo->Buffer = Buffer;
-				pInfo->Length = Length;
-				pInfo->Type = 0;
-				if (NT_SUCCESS(InsertReadWriteProcessMemoryApc(ethrd, pInfo)))
+				pInfo->fun = pfun;
+				if (NT_SUCCESS(InsertKernelApc(ethrd, pInfo)))
 				{
 					FREE(pInfo);
 					b = 1; break;
@@ -411,40 +195,69 @@ BOOLEAN ForceReadProcessMemory2(IN PEPROCESS Process, IN PVOID Address, IN UINT3
 	return b;
 }
 
-BOOLEAN ForceWriteProcessMemory2(IN PEPROCESS Process, IN PVOID Address, IN UINT32 Length, IN PVOID Buffer)
+BOOLEAN ExecFun1(PVOID pfun)
 {
 	ULONG i;
 	BOOLEAN b = 0;
+	PEPROCESS Process = GetProcessByName("dnf.exe");
+	if (Process == NULL)
+		return FALSE;
+
 	for (i = 4; i < 1048576; i = i + 4)
 	{
 		PETHREAD ethrd = LookupThread((HANDLE)i);
 		if (ethrd != NULL)
 		{
-			PEPROCESS eproc = IoThreadToProcess(ethrd);
-			ObDereferenceObject(ethrd);
-			if (eproc == Process)
+			ULONG count = 0;
+			//挂起线程
+			NTSTATUS st = PsSuspendThread(ethrd,&count);
+			if (!NT_SUCCESS(st))
 			{
-				PRWPM_INFO pInfo = MALLOC_NPP(sizeof(RWPM_INFO));
-				pInfo->Address = Address;
-				pInfo->Buffer = Buffer;
-				pInfo->Length = Length;
-				pInfo->Type = 1;
-				if (NT_SUCCESS(InsertReadWriteProcessMemoryApc(ethrd, pInfo)))
-				{
-					FREE(pInfo);
-					b = 1; break;
-				}
+				DbgPrint("挂起线程失败\n");
 			}
+			else
+			{
+				DbgPrint("挂起线程成功\n");
+			}
+			//获得线程CONTEXT
+			//修改线程CONTEXT
+			//恢复线程运行
 		}
 	}
 	return b;
 }
 
-BOOLEAN GetDxfCr3Real(IN PVOID Address, IN UINT32 Length, IN PVOID Buffer)
+VOID GetThreadFunAdd()
+{
+	__try {
+		PVOID pNtSuspendThread, pPsSuspendThread, pNtDebugContinue, pDbgkpWakeTarget, pResumeThread;
+		
+		pNtSuspendThread = GetSSDTFuncCurAddr(379);
+		pNtDebugContinue = GetSSDTFuncCurAddr(174);
+
+		pPsSuspendThread = GetSubFunInFunction(pNtSuspendThread, 1);
+
+		pDbgkpWakeTarget = GetSubFunInFunction(pNtDebugContinue, 5);
+		
+		pResumeThread = GetSubFunInFunction(pDbgkpWakeTarget, 0);
+		
+		DbgPrint("PsSuspendThread:%llx,pResumeThread:%llx\n", pPsSuspendThread,pResumeThread);
+
+		PsSuspendThread = pPsSuspendThread;
+		PsResumeThread = pResumeThread;
+	}
+	__except (1)
+	{
+		DbgPrint("异常\n");
+	}
+}
+
+VOID ThreadEipInsert() 
 {
 	ULONG i;
 	BOOLEAN b = 0;
-	PEPROCESS Process = GetProcessByName((UCHAR*)"dnf.exe");
+	GetThreadFunAdd();
+	PEPROCESS Process = GetProcessByName("dnf.exe");
 	if (Process == NULL)
 		return FALSE;
 
@@ -454,100 +267,32 @@ BOOLEAN GetDxfCr3Real(IN PVOID Address, IN UINT32 Length, IN PVOID Buffer)
 		if (ethrd != NULL)
 		{
 			PEPROCESS eproc = IoThreadToProcess(ethrd);
-			ObDereferenceObject(ethrd);
+			//ObDereferenceObject(ethrd);
 			if (eproc == Process)
 			{
-				PRWPM_INFO pInfo = MALLOC_NPP(sizeof(RWPM_INFO));
-				pInfo->Address = Address;
-				pInfo->Buffer = Buffer;
-				pInfo->Length = Length;
-				pInfo->Type = 1;
-				if (NT_SUCCESS(InsertGetDxfRealCr3Apc(ethrd, pInfo)))
+				ULONG count = 0;
+				NTSTATUS st = PsSuspendThread(ethrd,&count);
+				__debugbreak();
+				if (NT_SUCCESS(st))
 				{
-					FREE(pInfo);
-					b = 1; break;
+					DbgPrint("暂停线程成功\n");
+					
+					CONTEXT context = { 0 };
+					context.ContextFlags = CONTEXT_FULL;
+					st = PsGetContextThread(ethrd,&context,KernelMode);
+					DbgPrint("PsGetContextThread return %x\n", st);
+					if (NT_SUCCESS(st))
+					{
+						DbgPrint("获得线程Context结构成功\n");
+						st = PsResumeThread(ethrd, &count);
+						if (NT_SUCCESS(st))
+						{
+							DbgPrint("恢复线程运行成功\n");
+						}
+					}
 				}
 			}
 		}
 	}
-	return b;
-}
-
-
-BOOLEAN threeS(IN PVOID Address, IN UINT32 Length, IN PVOID Buffer)
-{
-	ULONG i;
-	BOOLEAN b = 0;
-	PEPROCESS Process = GetProcessByName((UCHAR*)"dnf.exe");
-	if (Process == NULL)
-		return FALSE;
-
-	for (i = 4; i < 1048576; i = i + 4)
-	{
-		PETHREAD ethrd = LookupThread((HANDLE)i);
-		if (ethrd != NULL)
-		{
-			PEPROCESS eproc = IoThreadToProcess(ethrd);
-			ObDereferenceObject(ethrd);
-			if (eproc == Process)
-			{
-				PRWPM_INFO pInfo = MALLOC_NPP(sizeof(RWPM_INFO));
-				pInfo->Address = Address;
-				pInfo->Buffer = Buffer;
-				pInfo->Length = Length;
-				pInfo->Type = 1;
-				if (NT_SUCCESS(InsertThreeSApc(ethrd, pInfo)))
-				{
-					FREE(pInfo);
-					b = 1; break;
-				}
-			}
-		}
-	}
-	return b;
-}
-
-BOOLEAN RestoreDate(IN PVOID Address, IN UINT32 Length, IN PVOID Buffer)
-{
-	ULONG i;
-	BOOLEAN b = 0;
-	PEPROCESS Process = GetProcessByName((UCHAR*)"dnf.exe");
-	if (Process == NULL)
-		return FALSE;
-
-	for (i = 4; i < 1048576; i = i + 4)
-	{
-		PETHREAD ethrd = LookupThread((HANDLE)i);
-		if (ethrd != NULL)
-		{
-			PEPROCESS eproc = IoThreadToProcess(ethrd);
-			ObDereferenceObject(ethrd);
-			if (eproc == Process)
-			{
-				PRWPM_INFO pInfo = MALLOC_NPP(sizeof(RWPM_INFO));
-				pInfo->Address = Address;
-				pInfo->Buffer = Buffer;
-				pInfo->Length = Length;
-				pInfo->Type = 1;
-				if (NT_SUCCESS(InsertRestoreDateApc(ethrd, pInfo)))
-				{
-					FREE(pInfo);
-					b = 1; break;
-				}
-			}
-		}
-	}
-	return b;
-}
-
-ULONG64 GetDxfCr3Fake() 
-{
-	PEPROCESS Process = GetProcessByName((UCHAR*)"dnf.exe");
-	if (Process != NULL)
-	{
-		return *(PULONG64)((ULONG64)Process + 0x28);
-	}
-	else
-		return 0;
 	
 }

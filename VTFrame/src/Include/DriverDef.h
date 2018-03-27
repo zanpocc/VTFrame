@@ -120,7 +120,7 @@ NTSTATUS DEVICE_CONTROL_DISPATCH(PDEVICE_OBJECT  DeviceObject, PIRP Irp)
 
 	case IOCTL_IO_TEST1: 
 	{
-		int1bool = FALSE;
+		
 		break;
 	}
 	case IOCTL_IO_TEST2:
