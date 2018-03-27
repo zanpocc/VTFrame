@@ -96,20 +96,7 @@ NTSTATUS DEVICE_CONTROL_DISPATCH(PDEVICE_OBJECT  DeviceObject, PIRP Irp)
 		//冰冻
 	case IOCTL_IO_TEST:
 	{
-		ULONG64 cr3 = 0,cr3_fake = 0;
-		cr3_fake = GetDxfCr3Fake();
-		if (cr3_fake != 0)
-			DbgPrint("dxf fake cr3:%llx\n");
-		else
-			DbgPrint("获取fake cr3失败\n");
-
-		if (GetDxfCr3Real((PVOID)0x00400000, (UINT32)8, &cr3))
-			DbgPrint("dxf real cr3:%llx\n", cr3);
-		else
-			DbgPrint("获取real cr3失败\n");
-
-		if (cr3 != 0 && cr3_fake != 0)
-			__vmx_vmcall(VTFrame_Test, cr3, cr3_fake, 0);
+		
 
 		//使进程线程回调失效
 		EnableObType(*PsProcessType,FALSE);

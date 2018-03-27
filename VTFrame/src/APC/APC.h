@@ -1,6 +1,6 @@
 #pragma once
-#include <ntifs.h>
-#include "../Include/GetUnExportFunAddress.h"
+#include <ntddk.h>
+#include "../Util/GetUnExportFunAddress.h"
 
 typedef VOID(*PFUNCTION)();
 
