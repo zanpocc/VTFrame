@@ -1,0 +1,86 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Include">
+      <UniqueIdentifier>{3ae28e51-ef9d-4b3b-a231-78c27813e88b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="VMX">
+      <UniqueIdentifier>{0e2ecdd5-f4fe-4be8-97f2-560f1a06b5ae}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="test">
+      <UniqueIdentifier>{f97c520f-61da-4845-99b8-8cbed9172f33}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\MyDriver.c" />
+    <ClCompile Include="src\VMX\VMX.c">
+      <Filter>VMX</Filter>
+    </ClCompile>
+    <ClCompile Include="src\VMX\ExitHandle.c">
+      <Filter>VMX</Filter>
+    </ClCompile>
+    <ClCompile Include="src\VMX\ept.c">
+      <Filter>VMX</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Hook\SysCallHook.c" />
+    <ClCompile Include="src\Test\Test.c" />
+    <ClCompile Include="src\Debug\DebugAPI.c" />
+    <ClCompile Include="src\CallBack\RemoveCallBack.c" />
+    <ClCompile Include="src\Monitor\Monitor.c" />
+    <ClCompile Include="src\APC\APC.c" />
+    <ClCompile Include="src\IDT\idt.c" />
+    <ClCompile Include="src\Debug\DebugPort.c" />
+    <ClCompile Include="src\Util\GetUnExportFunAddress.c" />
+    <ClCompile Include="src\Util\LDasm.c" />
+    <ClCompile Include="src\Hook\InlineHook.c" />
+    <ClCompile Include="src\Hook\PageHook.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\VMX\VMX.h">
+      <Filter>VMX</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Include\CPU.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Include\common.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Include\VMCS.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="src\VMX\vtasm.h">
+      <Filter>VMX</Filter>
+    </ClInclude>
+    <ClInclude Include="src\VMX\ExitHandle.h">
+      <Filter>VMX</Filter>
+    </ClInclude>
+    <ClInclude Include="src\VMX\ept.h">
+      <Filter>VMX</Filter>
+    </ClInclude>
+    <ClInclude Include="src\VMX\VmxEvent.h" />
+    <ClInclude Include="src\Include\Native.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Hook\SysCallHook.h" />
+    <ClInclude Include="src\Test\Test.h" />
+    <ClInclude Include="src\Debug\DebugAPI.h" />
+    <ClInclude Include="src\CallBack\RemoveCallBack.h" />
+    <ClInclude Include="src\Include\DriverDef.h" />
+    <ClInclude Include="src\Monitor\Monitor.h" />
+    <ClInclude Include="src\IDT\idt.h" />
+    <ClInclude Include="src\Debug\DebugPort.h" />
+    <ClInclude Include="src\KernelStruct\Win10KernelStruct.h" />
+    <ClInclude Include="src\KernelStruct\Win7KernelStruct.h" />
+    <ClInclude Include="src\Util\GetUnExportFunAddress.h" />
+    <ClInclude Include="src\Util\LDasm.h" />
+    <ClInclude Include="src\Hook\InlineHook.h" />
+    <ClInclude Include="src\Hook\PageHook.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="src\VMX\vtasm.asm" />
+    <MASM Include="src\Hook\SysCall.asm" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="src\APC\APC.h" />
+  </ItemGroup>
+</Project>
