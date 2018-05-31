@@ -21,6 +21,7 @@ typedef struct _PAGE_HOOK_ENTRY
 	PVOID OriginalPtr;      // Original function VA
 	PVOID DataPageVA;       // Data page VA
 	ULONG64 DataPagePFN;    // Data page PFN
+	ULONG64 DataPhys;
 	PVOID CodePageVA;       // Executable page VA
 	ULONG64 CodePagePFN;    // Executable page PFN
 	ULONG OriginalSize;     // Size of original data
@@ -28,5 +29,8 @@ typedef struct _PAGE_HOOK_ENTRY
 } PAGE_HOOK_ENTRY, *PPAGE_HOOK_ENTRY;
 
 
+NTSTATUS UnPageHook();
 NTSTATUS PHHook(IN PVOID pFunc, IN PVOID pHook);
 PPAGE_HOOK_ENTRY PHGetHookEntry(IN PVOID ptr);
+NTSTATUS ModifyAddressValue(PVOID address, PVOID pByte, ULONG length);
+NTSTATUS ModifyAddressValue2(PVOID address, PVOID pByte, ULONG length, PVOID address1, PVOID pByte1, ULONG length1);

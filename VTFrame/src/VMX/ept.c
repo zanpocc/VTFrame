@@ -3,6 +3,8 @@
 #include "../Include/VMCS.h"
 #include "../Hook/PageHook.h"
 #include "../VMX/ExitHandle.h"
+#include "../APC/APC.h"
+
 
 /************************************************************************/
 /*								构建EPT页表		      					*/
@@ -92,11 +94,14 @@ VOID EptEnable(IN ULONG64 *PML4)
 	__vmx_vmwrite(EPT_POINTER, EPTP.All);
 	__vmx_vmwrite(VIRTUAL_PROCESSOR_ID, VM_VPID);
 
+	//启用secondary
 	primary.Fields.ActivateSecondaryControl = TRUE;
+	//设置开启EPT
 	secondary.Fields.EnableEPT = TRUE;
-
+	//设置开启VPID
 	secondary.Fields.EnableVPID = TRUE;
 
+	//写入完成
 	__vmx_vmwrite(SECONDARY_VM_EXEC_CONTROL, secondary.All);
 	__vmx_vmwrite(CPU_BASED_VM_EXEC_CONTROL, primary.All);
 
@@ -161,6 +166,17 @@ VOID PteModify(ULONG64 data,ULONG64 code)
 	pPte->Fields.PhysAddr = code;
 }
 
+VOID UnPteModify(ULONG64 data) 
+{
+	PEPT_PTE_ENTRY pPte = GetPteEntry(data);
+	pPte->Fields.Read = 1;
+	pPte->Fields.Write = 1;
+	pPte->Fields.Execute = 1;
+	pPte->Fields.PhysAddr = data;
+}
+
+ULONG iii = 0;
+
 //把对EPT Exit处理放在这里吧
 VOID VmExitEptViolation(IN PGUEST_STATE GuestState)
 {
@@ -174,8 +190,24 @@ VOID VmExitEptViolation(IN PGUEST_STATE GuestState)
 		pEntry = CONTAINING_RECORD(pListEntry, PAGE_HOOK_ENTRY, Link);
 		if (pEntry->DataPagePFN == pfn)
 		{
+			
 			if (pViolationData->Fields.Read)
 			{
+				/*ULONG64 phys = pEntry->CodePagePFN;
+				if (GuestState->LinearAddress >= pEntry->OriginalPtr && GuestState->LinearAddress <= (ULONG_PTR)pEntry->OriginalPtr + 10)
+				{
+					DbgPrint("%llx正在对%llx进行读取\n", GuestState->GuestRip, GuestState->LinearAddress);
+					if (GuestState->GuestRip = (ULONG64)Function2 && GuestState->GuestRip <= (ULONG64)Function2 + 0x1000)
+					{
+						phys = pEntry->CodePagePFN;
+					}
+				}
+
+				if (pEntry->OriginalPtr == 0)
+				{
+					phys = pEntry->DataPagePFN;
+				}*/
+
 				PEPT_PTE_ENTRY pte = GetPteEntry(pfn);
 				pte->Fields.Read = 1;
 				pte->Fields.Write = 1;
@@ -184,6 +216,21 @@ VOID VmExitEptViolation(IN PGUEST_STATE GuestState)
 			}
 			else if (pViolationData->Fields.Write)
 			{
+				ULONG64 phys = pEntry->CodePagePFN;
+				/*if (GuestState->LinearAddress >= pEntry->OriginalPtr && GuestState->LinearAddress <= (ULONG_PTR)pEntry->OriginalPtr + 10)
+				{
+					DbgPrint("%llx正在对%llx进行写入\n", GuestState->GuestRip, GuestState->LinearAddress);
+					if (GuestState->GuestRip = (ULONG64)Function2 && GuestState->GuestRip <= (ULONG64)Function2 + 0x1000)
+					{
+						phys = pEntry->CodePagePFN;
+					}
+				}
+
+				if (pEntry->OriginalPtr == 0)
+				{
+					phys = pEntry->DataPagePFN;
+				}
+*/
 				PEPT_PTE_ENTRY pte = GetPteEntry(pfn);
 				pte->Fields.Read = 1;
 				pte->Fields.Write = 1;

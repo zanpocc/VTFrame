@@ -32,8 +32,8 @@ VOID BypassCheckSign(PDRIVER_OBJECT pDriverObj)
 
 NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 {
-	
 	NTSTATUS status;
+
 	// 查询硬件是否支持VT
 	if (!IsVTSupport())
 		return STATUS_UNSUCCESSFUL;
@@ -42,52 +42,32 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 	if (!AllocGlobalMemory())
 		return STATUS_UNSUCCESSFUL;
 
-	//PrintIdt();
-	//BypassCheckSign(DriverObject);
-
-	//TestCallBack();
 	// 开启VT主要代码
-	//if (!StartVT())
-	//	return STATUS_UNSUCCESSFUL;
+	if (!StartVT())
+		return STATUS_UNSUCCESSFUL;
 
-	//// 是否开启VT成功
-	//for (int i = 0; i <= (g_data->vcpus - 1); i++)
-	//{
-	//	if (g_data->cpu_data[i].VmxState == VMX_STATE_ON)
-	//	{
-	//		DbgPrint("VTFrame:CPU:%d开启VT成功\n", i);
-	//	}
-	//}
+	// 是否开启VT成功
+	for (int i = 0; i <= (g_data->vcpus - 1); i++)
+	{
+		if (g_data->cpu_data[i].VmxState == VMX_STATE_ON)
+			DbgPrint("VTFrame:CPU:%d开启VT成功\n", i);
+	}
 
-	////Inline Hook防止SSDT HOOK前面，我们的SSDT HOOK会导致某些SSDT函数地址获取不到而使Inline HOOK失败
-	//TestPageHook();
-	////TestInlineHook();
-	//TestSSDTHook();
 	
-	
-	//开启驱动加载回调,等到TP加载再开启VT
-	status = addDriverMonitor();
-	if (NT_SUCCESS(status))
-		DbgPrint("等待TP驱动加载....\n");
-	else
-		DbgPrint("创建驱动加载回调失败\n");
+	TestSSDTHook();
+	TestPageHook();
 
-	////监控DNF进程创建
-	//status = addProcessMonitor();
-	//if (NT_SUCCESS(status))
-	//	DbgPrint("开始监控DNF进程创建\n");
-	//else
-	//	DbgPrint("DNF进程创建监控开启失败\n");
-
+	//符号链接
 	status = CreateDeviceAndSymbol(DriverObject);
 	if (!NT_SUCCESS(status))
 		return status;
 
+	//IRP
 	DriverObject->MajorFunction[IRP_MJ_CREATE] = CREATE_DISPATCH;
 	DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = DEVICE_CONTROL_DISPATCH;
 	DriverObject->DriverUnload = Unload;
-
 	
+
 	return status;
 }
 
@@ -96,7 +76,7 @@ VOID Unload(PDRIVER_OBJECT DriverObject)
 	//卸载流程，先在DPC例程中调用VMCALL执行__vmx_off和一些寄存器的处理，接着释放申请的内存
 	// 此处也使用了KeSetSystemAffinityThread函数，不同时卸载,而是依次卸载
 	//removeMonitor();
-	UnloadTest();
+	//UnloadTest();
 	//removeDriverMonitor();
 	//removeProcessMonitor();
 

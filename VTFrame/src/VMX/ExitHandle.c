@@ -94,53 +94,56 @@ VOID VmExitVmCall(IN PGUEST_STATE GuestState)
 	//判断VMCALL类型
 	switch (HypercallNumber)
 	{
-	//VT卸载
-	case VTFrame_UNLOAD:
-	{
-		GuestState->ExitPending = TRUE;
-		break;
-	}
-	//页面异常
-	case VTFrame_HOOK_PAGE: 
-	{
-		ULONG64 data = GuestState->GpRegs->Rdx;
-		ULONG64 code = GuestState->GpRegs->R8;
-		PteModify(data, code);
-		__invept(INV_ALL_CONTEXTS, &ctx);
-		break;
-	}
-	case VTFrame_UNHOOK_PAGE:
-	{
-		break;
-	}
-	//SYSCALL HOOK
-	case VTFrame_HOOK_LSTAR:
-	{
-		__writemsr(MSR_LSTAR, (ULONG64)SyscallEntryPoint);
-		GuestState->Vcpu->OriginalLSTAR = GuestState->GpRegs->Rdx;
-		break;
-	}
-	case VTFrame_UNHOOK_LSTAR:
-	{
-		__writemsr(MSR_LSTAR, GuestState->Vcpu->OriginalLSTAR);
-		GuestState->Vcpu->OriginalLSTAR = 0;
-		break;
-	}
-	//Test
-	case VTFrame_Test:
-	{
-		//暂做测试DXF CR3切换
-		fake_Cr3 = (ULONG64)GuestState->GpRegs->R8;
-		real_Cr3 = (ULONG64)GuestState->GpRegs->Rdx;
-		cr3bool = TRUE;
-		int1bool = TRUE;
-		break;
-	}
-	default: 
-	{
-		DbgPrint("VTFrame:不支持的VMCALL类型\n");
-		break; 
-	}
+		//VT卸载
+		case VTFrame_UNLOAD:
+		{
+			GuestState->ExitPending = TRUE;
+			break;
+		}
+		//页面异常
+		case VTFrame_HOOK_PAGE: 
+		{
+			ULONG64 data = GuestState->GpRegs->Rdx;
+			ULONG64 code = GuestState->GpRegs->R8;
+			PteModify(data, code);
+			__invept(INV_ALL_CONTEXTS, &ctx);
+			break;
+		}
+		case VTFrame_UNHOOK_PAGE:
+		{
+			ULONG64 data = GuestState->GpRegs->Rdx;
+			UnPteModify(data);
+			break;
+		}
+		//SYSCALL HOOK
+		case VTFrame_HOOK_LSTAR:
+		{
+			//保存原始MSR_LSTAR寄存器
+			GuestState->Vcpu->OriginalLSTAR = GuestState->GpRegs->Rdx;
+			__writemsr(MSR_LSTAR, (ULONG64)SyscallEntryPoint);
+			break;
+		}
+		case VTFrame_UNHOOK_LSTAR:
+		{
+			__writemsr(MSR_LSTAR, GuestState->Vcpu->OriginalLSTAR);
+			GuestState->Vcpu->OriginalLSTAR = 0;
+			break;
+		}
+		//Test
+		case VTFrame_Test:
+		{
+			//暂做测试DXF CR3切换
+			fake_Cr3 = (ULONG64)GuestState->GpRegs->R8;
+			real_Cr3 = (ULONG64)GuestState->GpRegs->Rdx;
+			cr3bool = TRUE;
+			int1bool = TRUE;
+			break;
+		}
+		default: 
+		{
+			DbgPrint("VTFrame:不支持的VMCALL类型\n");
+			break; 
+		}
 	}
 
 	VmxpAdvanceEIP(GuestState);
@@ -173,25 +176,24 @@ VOID VmExitRdtscp(IN PGUEST_STATE GuestState)
 
 VOID VmExitCPUID(IN PGUEST_STATE GuestState)
 {
-	CPUID cpu_info = { 0 };
-
-	__cpuidex((int*)&cpu_info, (int)GuestState->GpRegs->Rax, (int)GuestState->GpRegs->Rcx);
+	//CPUID cpu_info = { 0 };
+	unsigned int cpu_info[4] = {0};
+	//rax function_id rcx sub_function_id
+	__cpuidex((int*)cpu_info, (int)GuestState->GpRegs->Rax, (int)GuestState->GpRegs->Rcx);
 
 	if ((int)GuestState->GpRegs->Rax == 1)
 	{
-		//DbgPrint("%s正在调用CPUID\n",PsGetProcessImageFileName(PsGetCurrentProcess()));
-		GuestState->GpRegs->Rax = cpu_info.eax;
-		GuestState->GpRegs->Rbx = cpu_info.ebx;
-		//GuestState->GpRegs->Rcx = cpu_info.ecx;
-		GuestState->GpRegs->Rcx = 0xfffa3203;
-		GuestState->GpRegs->Rdx = cpu_info.edx;
-	}else{
-
-		GuestState->GpRegs->Rax = cpu_info.eax;
-		GuestState->GpRegs->Rbx = cpu_info.ebx;
-		GuestState->GpRegs->Rcx = cpu_info.ecx;
-		GuestState->GpRegs->Rdx = cpu_info.edx;
+		CpuFeaturesEcx ecx = {0};
+		ecx.all = cpu_info[2];
+		ecx.fields.not_used = TRUE;
+		cpu_info[2] = ecx.all;
 	}
+	
+	GuestState->GpRegs->Rax = cpu_info[0];
+	GuestState->GpRegs->Rbx = cpu_info[1];
+	GuestState->GpRegs->Rcx = cpu_info[2];
+	GuestState->GpRegs->Rdx = cpu_info[3];
+
 	VmxpAdvanceEIP(GuestState);
 }
 
@@ -202,89 +204,151 @@ VOID VmExitINVD(IN PGUEST_STATE GuestState)
 	VmxpAdvanceEIP(GuestState);
 }
 
+PULONG_PTR VmmpSelectRegister(ULONG index, PGUEST_STATE guest_context)
+{
+	PULONG_PTR register_used = NULL;
+	switch (index)
+	{
+	case 0: register_used = &guest_context->GpRegs->Rax; break;
+	case 1: register_used = &guest_context->GpRegs->Rcx; break;
+	case 2: register_used = &guest_context->GpRegs->Rdx; break;
+	case 3: register_used = &guest_context->GpRegs->Rbx; break;
+	case 4: register_used = &guest_context->GpRegs->Rsp; break;
+	case 5: register_used = &guest_context->GpRegs->Rbp; break;
+	case 6: register_used = &guest_context->GpRegs->Rsi; break;
+	case 7: register_used = &guest_context->GpRegs->Rdi; break;
+		//仅仅X64支持
+	case 8: register_used = &guest_context->GpRegs->R8; break;
+	case 9: register_used = &guest_context->GpRegs->R9; break;
+	case 10: register_used = &guest_context->GpRegs->R10; break;
+	case 11: register_used = &guest_context->GpRegs->R11; break;
+	case 12: register_used = &guest_context->GpRegs->R12; break;
+	case 13: register_used = &guest_context->GpRegs->R13; break;
+	case 14: register_used = &guest_context->GpRegs->R14; break;
+	case 15: register_used = &guest_context->GpRegs->R15; break;
+	default: DbgPrint("VmmpSelectRegister错误的寄存器索引\n"); break;
+	}
+
+	return register_used;
+}
+
+
 //CR寄存器访问
 VOID VmExitCR(IN PGUEST_STATE GuestState)
 {
 	PMOV_CR_QUALIFICATION data = (PMOV_CR_QUALIFICATION)&GuestState->ExitQualification;
-	PULONG64 regPtr = (PULONG64)&GuestState->GpRegs->Rax + data->Fields.Register;
-	VPID_CTX ctx = { 0 };
+	PULONG64 regPtr = VmmpSelectRegister((ULONG)data->Fields.Register, GuestState);
+	EPT_CTX ctx = { 0 };
 	switch (data->Fields.AccessType)
 	{
-	//CR寄存器写入
-	case TYPE_MOV_TO_CR:
-	{
-		switch (data->Fields.ControlRegister)
-		{
-		case 0:
-			__vmx_vmwrite(GUEST_CR0, *regPtr);
-			__vmx_vmwrite(CR0_READ_SHADOW, *regPtr);
-			DbgPrint("cr0写入\n");
-			break;
-		case 3:
-			//开启VPID后对CR3的写操作都必须使得TLB缓存失效
-
-			if (cr3bool)
+		//CR寄存器写入
+		case TYPE_MOV_TO_CR:
+			switch (data->Fields.ControlRegister)
 			{
-				if (fake_Cr3 == *regPtr)
-					__vmx_vmwrite(GUEST_CR3, real_Cr3);
-				else
-					__vmx_vmwrite(GUEST_CR3, *regPtr);
+			case 0:
+				__vmx_vmwrite(GUEST_CR0, *regPtr);
+				__vmx_vmwrite(CR0_READ_SHADOW, *regPtr);
+				DbgPrint("cr0写入\n");
+				break;
+			case 3:
 				
-			}else
-				__vmx_vmwrite(GUEST_CR3, *regPtr);
-
-			//DbgPrint("%s正在进行Cr3写入", PsGetProcessImageFileName(PsGetCurrentProcess()));
-			//__vmx_vmwrite(GUEST_CR3, *regPtr);
-			__invvpid(INV_ALL_CONTEXTS, &ctx);
+				__invvpid(INV_ALL_CONTEXTS,&ctx);
+				__vmx_vmwrite(GUEST_CR3, (*regPtr & ~(1ULL << 63)));
+				
+				break;
+			case 4:
+				__vmx_vmwrite(GUEST_CR4, *regPtr);
+				__vmx_vmwrite(CR4_READ_SHADOW, *regPtr);
+				DbgPrint("cr4写入\n");
+				break;
+			default:
+				DPRINT("HyperBone: CPU %d: %s: Unsupported register %d\n", CPU_IDX, __FUNCTION__, data->Fields.ControlRegister);
+				ASSERT(FALSE);
+				DbgPrint("其它cr写入\n");
+				break;
+			}
 			break;
-		case 4:
-			__vmx_vmwrite(GUEST_CR4, *regPtr);
-			__vmx_vmwrite(CR4_READ_SHADOW, *regPtr);
-			DbgPrint("cr4写入\n");
+		//CR寄存器读取
+		case TYPE_MOV_FROM_CR:
+		
+			switch (data->Fields.ControlRegister)
+			{
+			case 0:
+				__vmx_vmread(GUEST_CR0, regPtr);
+				DbgPrint("cr0读取\n");
+				break;
+			case 3:
+				__vmx_vmread(GUEST_CR3, regPtr);
+				break;
+			case 4:
+				__vmx_vmread(GUEST_CR4, regPtr);
+				DbgPrint("cr4读取\n");
+				break;
+			default:
+				DPRINT("HyperBone: CPU %d: %s: Unsupported register %d\n", CPU_IDX, __FUNCTION__, data->Fields.ControlRegister);
+				ASSERT(FALSE);
+				DbgPrint("其它cr读取\n");
+				break;
+			}
 			break;
 		default:
-			DPRINT("HyperBone: CPU %d: %s: Unsupported register %d\n", CPU_IDX, __FUNCTION__, data->Fields.ControlRegister);
+			DPRINT("HyperBone: CPU %d: %s: Unsupported operation %d\n", CPU_IDX, __FUNCTION__, data->Fields.AccessType);
 			ASSERT(FALSE);
-			DbgPrint("其它cr写入\n");
+			DbgPrint("其它cr操作\n");
 			break;
-		}
 	}
-	break;
-	//CR寄存器读取
-	case TYPE_MOV_FROM_CR:
+	
+	VmxpAdvanceEIP(GuestState);
+}
+
+
+
+//DR寄存器访问
+VOID VmExitDR(IN PGUEST_STATE GuestState)
+{
+	
+	PMOV_DR_QUALIFICATION data = (PMOV_DR_QUALIFICATION)&GuestState->ExitQualification;
+	
+	PULONG64 regPtr = VmmpSelectRegister((ULONG)data->Fields.Register, GuestState);
+	
+	switch (data->Fields.AccessType)
 	{
-		switch (data->Fields.ControlRegister)
-		{
-		case 0:
-			__vmx_vmread(GUEST_CR0, regPtr);
-			DbgPrint("cr0读取\n");
+		case TYPE_MOV_TO_DR:
+			switch (data->Fields.Debugl_Register)
+			{
+			case 0: __writedr(0, *regPtr); break;;
+			case 1: __writedr(1, *regPtr); break;
+			case 2: __writedr(2, *regPtr); break;
+			case 3: __writedr(3, *regPtr); break;
+			case 4: __writedr(4, *regPtr); break;
+			case 5: __writedr(5, *regPtr); break;
+			case 6: __writedr(6, *regPtr); break;
+			case 7:  __vmx_vmwrite(GUEST_DR7, *regPtr); break;
+			default: break;
+			}
 			break;
-		case 3:
-			__vmx_vmread(GUEST_CR3, regPtr);
+		
+		case TYPE_MOV_FROM_DR:
+			switch (data->Fields.Debugl_Register)
+			{
+			case 0: *regPtr = __readdr(0); break;
+			case 1: *regPtr = __readdr(1); break;
+			case 2: *regPtr = __readdr(2); break;
+			case 3: *regPtr = __readdr(3); break;
+			case 4: *regPtr = __readdr(4); break;
+			case 5: *regPtr = __readdr(5); break;
+			case 6: *regPtr = __readdr(6); break;
+			case 7: *regPtr = VmcsRead(GUEST_DR7); break;
+			default: break;
+			}
 			break;
-		case 4:
-			__vmx_vmread(GUEST_CR4, regPtr);
-			DbgPrint("cr4读取\n");
-			break;
-		default:
-			DPRINT("HyperBone: CPU %d: %s: Unsupported register %d\n", CPU_IDX, __FUNCTION__, data->Fields.ControlRegister);
-			ASSERT(FALSE);
-			DbgPrint("其它cr读取\n");
-			break;
-		}
-	}
-	break;
 
-	default:
-		DPRINT("HyperBone: CPU %d: %s: Unsupported operation %d\n", CPU_IDX, __FUNCTION__, data->Fields.AccessType);
-		ASSERT(FALSE);
-		DbgPrint("其它cr操作\n");
-		break;
+		default:
+			DbgPrint("错误的操作\n"); break;
 	}
 
 	VmxpAdvanceEIP(GuestState);
 }
-
 
 //MSR读取
 VOID VmExitMSRRead(IN PGUEST_STATE GuestState)
@@ -351,12 +415,12 @@ VOID VmExitMSRRead(IN PGUEST_STATE GuestState)
 
 	default:
 		DbgPrint("其它MSR寄存器的读取:%x\n", ecx);
+		
 		MsrValue.QuadPart = __readmsr(ecx);
 	}
 
 	GuestState->GpRegs->Rax = MsrValue.LowPart;
 	GuestState->GpRegs->Rdx = MsrValue.HighPart;
-
 	
 	VmxpAdvanceEIP(GuestState);
 }
@@ -379,7 +443,11 @@ VOID VmExitMSRWrite(IN PGUEST_STATE GuestState)
 		if (GuestState->Vcpu->OriginalLSTAR == 0)
 			__writemsr(MSR_LSTAR, MsrValue.QuadPart);
 		else
+		{
+			__writemsr(MSR_LSTAR, MsrValue.QuadPart);
 			DbgPrint("对MSR_LSTAR的写入已被拦截");
+		}
+			
 		break;
 	case MSR_GS_BASE:
 		__vmx_vmwrite(GUEST_GS_BASE, MsrValue.QuadPart);
@@ -425,7 +493,7 @@ VOID VmExitMSRWrite(IN PGUEST_STATE GuestState)
 
 
 //VMM主要处理
-DECLSPEC_NORETURN EXTERN_C VOID VmxpExitHandler(IN PCONTEXT Context)
+EXTERN_C VOID VmxpExitHandler(IN PMYCONTEXT Context)
 {
 	GUEST_STATE guestContext = { 0 };
 
@@ -433,18 +501,21 @@ DECLSPEC_NORETURN EXTERN_C VOID VmxpExitHandler(IN PCONTEXT Context)
 	KeRaiseIrql(HIGH_LEVEL, &guestContext.GuestIrql);
 
 	//因为调用了Native函数，所以原始的RCX在堆栈中，将它获取出来
-	Context->Rcx = *(PULONG64)((ULONG_PTR)Context - sizeof(Context->Rcx));
+	Context->Rcx = *(PULONG64)((ULONG_PTR)Context + sizeof(MYCONTEXT) - sizeof(ULONG64)*2);
 
 	PVCPU Vcpu = &g_data->cpu_data[CPU_IDX];
 
 	//获取处理Exit事件时必须的一些参数
 	guestContext.Vcpu = Vcpu;
 	guestContext.GuestEFlags.All = VmcsRead(GUEST_RFLAGS);
+	//客户机RIP
 	guestContext.GuestRip = VmcsRead(GUEST_RIP);
 	guestContext.GuestRsp = VmcsRead(GUEST_RSP);
 	guestContext.ExitReason = VmcsRead(VM_EXIT_REASON) & 0xFFFF;
 	guestContext.ExitQualification = VmcsRead(EXIT_QUALIFICATION);
+	//访问那个线性地址导致的vm-exit
 	guestContext.LinearAddress = VmcsRead(GUEST_LINEAR_ADDRESS);
+	//访问那个物理地址导致的vm-exit
 	guestContext.PhysicalAddress.QuadPart = VmcsRead(GUEST_PHYSICAL_ADDRESS);
 	guestContext.GpRegs = Context;
 	//卸载VT的标志
@@ -453,6 +524,7 @@ DECLSPEC_NORETURN EXTERN_C VOID VmxpExitHandler(IN PCONTEXT Context)
 	
 	switch (guestContext.ExitReason)
 	{
+		//必须处理
 		case EXIT_REASON_CPUID:
 		{
 			VmExitCPUID(&guestContext);
@@ -463,26 +535,33 @@ DECLSPEC_NORETURN EXTERN_C VOID VmxpExitHandler(IN PCONTEXT Context)
 			VmExitINVD(&guestContext);
 			break;
 		}
+		//开启后处理
 		case EXIT_REASON_MSR_READ:
 		{
-			DbgPrint("%x,msr寄存器读取,%s\n", (ULONG32)guestContext.GpRegs->Rcx,PsGetProcessImageFileName(PsGetCurrentProcess()));
 			VmExitMSRRead(&guestContext);
 			break;
 		}
 		case EXIT_REASON_MSR_WRITE:
 		{	
-			DbgPrint("%x,msr寄存器写入,%s\n", (ULONG32)guestContext.GpRegs->Rcx, PsGetProcessImageFileName(PsGetCurrentProcess()));
 			VmExitMSRWrite(&guestContext);
 			break;
 		}
+		//自己什么时候使用什么时候处理
 		case EXIT_REASON_VMCALL:
 		{
 			VmExitVmCall(&guestContext);
 			break;
 		}
+		//开启后处理CR
 		case EXIT_REASON_CR_ACCESS:
 		{
 			VmExitCR(&guestContext);
+			break;
+		}
+		//开启后处理DR
+		case EXIT_REASON_DR_ACCESS:
+		{
+			VmExitDR(&guestContext);
 			break;
 		}
 		case EXIT_REASON_GETSEC:
@@ -495,31 +574,34 @@ DECLSPEC_NORETURN EXTERN_C VOID VmxpExitHandler(IN PCONTEXT Context)
 			VmExitRdtscp(&guestContext);
 			break;
 		}
+		//开启EPT HOOK后处理
 		case EXIT_REASON_EPT_VIOLATION:
 		{
 			VmExitEptViolation(&guestContext);
 			break;
 		}
+		//开启EPT HOOK后处理
 		case EXIT_REASON_EPT_MISCONFIG:
 		{
 			VmExitEptMisconfig(&guestContext);
 			break;
 		}
+		//自己什么时候使用什么时候处理
 		case EXIT_REASOM_MTF:
 		{
 			VmExitMTF(&guestContext);
 			break;
 		}
+		//开启异常捕获后处理
 		case EXIT_REASON_EXCEPTION_NMI:
 		{
 			VmExitEvent(&guestContext);
 			break;
 		}
 		default: {
-			DbgPrint("其它的VMExit事件类型:%x", guestContext.ExitReason);
+			DbgPrint("其它的VMExit事件类型:%x\n", guestContext.ExitReason);
 			break;
 		}
-	
 	}
 
 	//如果ExitPending为TRUE则表示需要处理VT的卸载
@@ -527,24 +609,18 @@ DECLSPEC_NORETURN EXTERN_C VOID VmxpExitHandler(IN PCONTEXT Context)
 	{
 		_lgdt(&Vcpu->HostState.SpecialRegisters.Gdtr.Limit);
 		__lidt(&Vcpu->HostState.SpecialRegisters.Idtr.Limit);
-
-		
 		__writecr3(VmcsRead(GUEST_CR3));
-
 		Context->Rsp = guestContext.GuestRsp;
-		Context->Rip = (ULONG64)guestContext.GuestRip;
-
+		//Context->Rip = (ULONG64)guestContext.GuestRip;
 		__vmx_off();
 		Vcpu->VmxState = VMX_STATE_OFF;
 	}
 	else
 	{
 		Context->Rsp += sizeof(Context->Rcx);
-		Context->Rip = (ULONG64)VmxpResume;
 	}
 
 	KeLowerIrql(guestContext.GuestIrql);
-	RtlRestoreContext(Context, NULL);
 }
 
 

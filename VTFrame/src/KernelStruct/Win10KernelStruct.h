@@ -528,11 +528,10 @@ typedef struct _KTHREAD                                            // 180 elemen
 	/*0x5E4*/     LONG32       Spare22;
 }KTHREAD, *PKTHREAD;
 
-
-
-typedef struct _ETHREAD                                            // 108 elements, 0x810 bytes (sizeof) 
+typedef struct _ETHREAD_S                                            // 108 elements, 0x810 bytes (sizeof) 
 {
-	/*0x000*/     struct _KTHREAD Tcb;                                           // 180 elements, 0x5E8 bytes (sizeof) 
+	///*0x000*/     struct _KTHREAD Tcb;                                           // 180 elements, 0x5E8 bytes (sizeof) 
+	UCHAR Tcb[0X5E8];
 	/*0x5E8*/     union _LARGE_INTEGER CreateTime;                               // 4 elements, 0x8 bytes (sizeof)     
 	union                                                          // 2 elements, 0x10 bytes (sizeof)    
 	{
@@ -688,7 +687,7 @@ typedef struct _ETHREAD                                            // 108 elemen
 	/*0x7E8*/     struct _LIST_ENTRY OwnerEntryListHead;                         // 2 elements, 0x10 bytes (sizeof)    
 	/*0x7F8*/     UINT64       DisownedOwnerEntryListLock;
 	/*0x800*/     struct _LIST_ENTRY DisownedOwnerEntryListHead;                 // 2 elements, 0x10 bytes (sizeof)    
-}ETHREAD, *PETHREAD;
+}ETHREAD_S, *PETHREAD_S;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1236,3 +1235,133 @@ typedef struct _EPROCESS                                               // 223 el
 }EPROCESS, *PEPROCESS;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/*
+kd> dt nt!_OBJECT_TYPE_INITIALIZER
+dtx is unsupported for this scenario.  It only recognizes dtx [<type>] [<address>] with -a, -h, and -r.  Reverting to dt.
++0x000 Length           : Uint2B
++0x002 ObjectTypeFlags  : Uint2B
++0x002 CaseInsensitive  : Pos 0, 1 Bit
++0x002 UnnamedObjectsOnly : Pos 1, 1 Bit
++0x002 UseDefaultObject : Pos 2, 1 Bit
++0x002 SecurityRequired : Pos 3, 1 Bit
++0x002 MaintainHandleCount : Pos 4, 1 Bit
++0x002 MaintainTypeList : Pos 5, 1 Bit
++0x002 SupportsObjectCallbacks : Pos 6, 1 Bit
++0x002 CacheAligned     : Pos 7, 1 Bit
++0x003 UseExtendedParameters : Pos 0, 1 Bit
++0x003 Reserved         : Pos 1, 7 Bits
++0x004 ObjectTypeCode   : Uint4B
++0x008 InvalidAttributes : Uint4B
++0x00c GenericMapping   : _GENERIC_MAPPING
++0x01c ValidAccessMask  : Uint4B
++0x020 RetainAccess     : Uint4B
++0x024 PoolType         : _POOL_TYPE
++0x028 DefaultPagedPoolCharge : Uint4B
++0x02c DefaultNonPagedPoolCharge : Uint4B
++0x030 DumpProcedure    : Ptr64     void
++0x038 OpenProcedure    : Ptr64     long
++0x040 CloseProcedure   : Ptr64     void
++0x048 DeleteProcedure  : Ptr64     void
++0x050 ParseProcedure   : Ptr64     long
++0x050 ParseProcedureEx : Ptr64     long
++0x058 SecurityProcedure : Ptr64     long
++0x060 QueryNameProcedure : Ptr64     long
++0x068 OkayToCloseProcedure : Ptr64     unsigned char
++0x070 WaitObjectFlagMask : Uint4B
++0x074 WaitObjectFlagOffset : Uint2B
++0x076 WaitObjectPointerOffset : Uint2B
+kd> ??sizeof(_OBJECT_TYPE_INITIALIZER)
+unsigned int64 0x78
+
+*/
+typedef struct _OBJECT_TYPE_INITIALIZER                                                                                                                                      // 25 elements, 0x70 bytes (sizeof)
+{
+	/*0x000*/     UINT16       Length;
+	union                                                                                                                                                                                                                                     // 2 elements, 0x2 bytes (sizeof)   
+	{
+		/*0x002*/         UINT16       ObjectTypeFlags;
+		struct                                                                                                                                                                                                                                // 2 elements, 0x2 bytes (sizeof)   
+		{
+			struct                                                                                                                                                                                                                            // 8 elements, 0x1 bytes (sizeof)   
+			{
+				/*0x002*/                 UINT8        CaseInsensitive : 1;                                                                                                                                                                                             // 0 BitPosition                    
+				/*0x002*/                 UINT8        UnnamedObjectsOnly : 1;                                                                                                                                                                                          // 1 BitPosition                    
+				/*0x002*/                 UINT8        UseDefaultObject : 1;                                                                                                                                                                                            // 2 BitPosition                    
+				/*0x002*/                 UINT8        SecurityRequired : 1;                                                                                                                                                                                            // 3 BitPosition                    
+				/*0x002*/                 UINT8        MaintainHandleCount : 1;                                                                                                                                                                                         // 4 BitPosition                    
+				/*0x002*/                 UINT8        MaintainTypeList : 1;                                                                                                                                                                                            // 5 BitPosition                    
+				/*0x002*/                 UINT8        SupportsObjectCallbacks : 1;                                                                                                                                                                                     // 6 BitPosition                    
+				/*0x002*/                 UINT8        CacheAligned : 1;                                                                                                                                                                                                // 7 BitPosition                    
+			};
+			struct                                                                                                                                                                                                                            // 2 elements, 0x1 bytes (sizeof)   
+			{
+				/*0x003*/                 UINT8        UseExtendedParameters : 1;                                                                                                                                                                                       // 0 BitPosition                    
+				/*0x003*/                 UINT8        Reserved : 7;                                                                                                                                                                                                    // 1 BitPosition                    
+			};
+		};
+	};
+	/*0x004*/     ULONG32      ObjectTypeCode;
+	/*0x008*/     ULONG32      InvalidAttributes;
+	/*0x00C*/     struct _GENERIC_MAPPING GenericMapping;                                                                                                                                                                                                   // 4 elements, 0x10 bytes (sizeof)  
+	/*0x01C*/     ULONG32      ValidAccessMask;
+	/*0x020*/     ULONG32      RetainAccess;
+	/*0x024*/     enum _POOL_TYPE PoolType;
+	/*0x028*/     ULONG32      DefaultPagedPoolCharge;
+	/*0x02C*/     ULONG32      DefaultNonPagedPoolCharge;
+	/*0x030*/     UCHAR DumpProcedure[0x8];
+	/*0x038*/	  UCHAR OpenProcedure[0x8];
+	/*0x040*/     UCHAR CloseProcedure[0x8];
+	/*0x048*/     UCHAR DeleteProcedure[0x8];
+	union                                                                                                                                                                                                                                     // 2 elements, 0x8 bytes (sizeof)   
+	{
+		/*0x050*/         UCHAR ParseProcedure[0x8];
+		/*0x050*/         UCHAR ParseProcedureEx[0x8];
+	};
+	/*0x058*/     UCHAR SecurityProcedure[0x8];
+	/*0x060*/     UCHAR QueryNameProcedure[0x8];
+	/*0x068*/     UCHAR OkayToCloseProcedure[0x8];
+	/*0x070*/     ULONG32      WaitObjectFlagMask;
+	/*0x074*/     UINT16       WaitObjectFlagOffset;
+	/*0x076*/     UINT16       WaitObjectPointerOffset;
+}OBJECT_TYPE_INITIALIZER_S, *POBJECT_TYPE_INITIALIZER;
+
+
+/*
+ntdll!_OBJECT_TYPE
++0x000 TypeList         : _LIST_ENTRY
++0x010 Name             : _UNICODE_STRING
++0x020 DefaultObject    : Ptr64 Void
++0x028 Index            : UChar
++0x02c TotalNumberOfObjects : Uint4B
++0x030 TotalNumberOfHandles : Uint4B
++0x034 HighWaterNumberOfObjects : Uint4B
++0x038 HighWaterNumberOfHandles : Uint4B
++0x040 TypeInfo         : _OBJECT_TYPE_INITIALIZER
++0x0b8 TypeLock         : _EX_PUSH_LOCK
++0x0c0 Key              : Uint4B
++0x0c8 CallbackList     : _LIST_ENTRY
+kd> ??sizeof(_OBJECT_TYPE)
+unsigned int64 0xd8
+
+*/
+typedef struct _OBJECT_TYPE_S                   // 12 elements, 0xD0 bytes (sizeof)
+{
+	/*0x000*/     struct _LIST_ENTRY TypeList;              // 2 elements, 0x10 bytes (sizeof)  
+	/*0x010*/     struct _UNICODE_STRING Name;              // 3 elements, 0x10 bytes (sizeof)  
+	/*0x020*/     VOID*        DefaultObject;
+	/*0x028*/     UINT8        Index;
+	/*0x029*/     UINT8        _PADDING0_[0x3];
+	/*0x02C*/     ULONG32      TotalNumberOfObjects;
+	/*0x030*/     ULONG32      TotalNumberOfHandles;
+	/*0x034*/     ULONG32      HighWaterNumberOfObjects;
+	/*0x038*/     ULONG32      HighWaterNumberOfHandles;
+	/*0x03C*/     UINT8        _PADDING1_[0x4];
+	/*0x040*/     struct _OBJECT_TYPE_INITIALIZER TypeInfo; // 32 elements, 0x78 bytes (sizeof) 
+	/*0x0B8*/     struct _EX_PUSH_LOCK TypeLock;            // 7 elements, 0x8 bytes (sizeof)   
+	/*0x0C0*/     ULONG32      Key;
+	/*0x0C4*/     UINT8        _PADDING2_[0x4];
+	/*0x0C8*/     struct _LIST_ENTRY CallbackList;          // 2 elements, 0x10 bytes (sizeof)  
+}OBJECT_TYPE_S, *POBJECT_TYPE_S;
+
+

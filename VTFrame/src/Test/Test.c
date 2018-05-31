@@ -4,24 +4,42 @@
 #include "../Hook/PageHook.h"
 #include "../Hook/InlineHook.h"
 #include "../Util/GetUnExportFunAddress.h"
+#include "../Debug/DebugAPI.h"
 
 //根据SSDT表函数的地址获取索引
 #define SSDTIndex(ptr)              *(PULONG)((ULONG_PTR)ptr + 0x15)
 
+ULONG64 ntdebugactiveprocess = 0;
+
+ULONG64 TestFn(ULONG64 in1, ULONG64 in2);
+#pragma alloc_text(".text0", TestFn)
+ULONG64 TestFn(ULONG64 in1, ULONG64 in2)
+{
+	ULONG64 data1 = 0x500;
+	data1 += in1;
+	in2 -= 0x10;
+	return in1 + in2 * 3 - in1 / in2 + data1;
+}
+
+ULONG64 hkTestFn(ULONG64 in1, ULONG64 in2);
+#pragma alloc_text(".text1", hkTestFn)
+ULONG64 hkTestFn(ULONG64 in1, ULONG64 in2)
+{
+	return 0xDEADBEEF;
+}
 
 VOID TestSSDTHook() 
 {
+	ntdebugactiveprocess = GetSSDTFunAddrress(Nt_DebugActiveProcess);
+	//win7/win10 OK
 	InitSysCallHook();
 	InitDebugSystem();
-
-	AddSSDTHook(144, (PVOID)proxyNtCreateDebugObject, 4);
-	AddSSDTHook(173, (PVOID)proxyNtDebugActiveProcess, 2);
-	AddSSDTHook(395, (PVOID)proxyNtWaitForDebugEvent, 4);
-	AddSSDTHook(174, (PVOID)proxyNtDebugContinue, 3);
-	AddSSDTHook(314, (PVOID)proxyNtRemoveProcessDebug,2);
 	
-	//AddSSDTHook(35, proxyNtOpenProcess, 4);
-	//AddSSDTHook(60, proxyNtReadVirtualMemory, 5);
+	AddSSDTHook(Nt_CreateDebugObject, (PVOID)proxyNtCreateDebugObject, 4);
+	//AddSSDTHook(Nt_DebugActiveProcess, (PVOID)proxyNtDebugActiveProcess, 2);
+	AddSSDTHook(Nt_WaitForDebugEvent, (PVOID)proxyNtWaitForDebugEvent, 4);
+	AddSSDTHook(Nt_DebugContinue, (PVOID)proxyNtDebugContinue, 3);
+	AddSSDTHook(Nt_RemoveProcessDebug, (PVOID)proxyNtRemoveProcessDebug, 2);
 }
 
 VOID UnloadTest()
@@ -101,38 +119,29 @@ VOID TestInlineHook()
 	SetLineHook(pDbgkForwardException, proxyDbgkForwardException);
 }
 
-ULONG64 TestFn(ULONG64 in1, ULONG64 in2);
-#pragma alloc_text(".text0", TestFn)
-ULONG64 TestFn(ULONG64 in1, ULONG64 in2)
-{
-	ULONG64 data1 = 0x500;
-	data1 += in1;
-	in2 -= 0x10;
-	return in1 + in2 * 3 - in1 / in2 + data1;
-}
-
-ULONG64 hkTestFn(ULONG64 in1, ULONG64 in2);
-#pragma alloc_text(".text1", hkTestFn)
-ULONG64 hkTestFn(ULONG64 in1, ULONG64 in2)
-{
-	return 0xDEADBEEF;
-}
-
-
 VOID TestPageHook() 
 {
-	PVOID pOri = NULL, pDbgkForwardException;
-	pDbgkForwardException = (PVOID)GetTrap03Address();
-	pOri = (PVOID)GetSubFunInFunction((PVOID)GetSubFunInFunction((PVOID)GetSubFunInFunction((PVOID)GetSSDTFunAddrress(173), 4), 0), 12);
+	NTSTATUS st = STATUS_UNSUCCESSFUL;
+	PVOID pOriDbgkpQueueMessage = NULL, pDbgkForwardException = NULL;
 
-	NTSTATUS st = PHHook(pOri, DbgkpQueueMessage_2);
+	pDbgkForwardException = (PVOID)GetTrap03Address();
+	pOriDbgkpQueueMessage = (PVOID)GetSubFunInFunction((PVOID)GetSubFunInFunction((PVOID)GetSubFunInFunction((PVOID)GetSSDTFunAddrress(Nt_DebugActiveProcess), DbgkpPostFakeProcessCreateMessages_i), DbgkpPostFakeThreadMessages_i), DbgkpQueueMessage_i);
+
+	st = PHHook(pOriDbgkpQueueMessage, DbgkpQueueMessage_2);
 	if (NT_SUCCESS(st))
 	{
 		DbgPrint("PHHook DbgkpQueueMessage success\n");
 	}
-	
+
 	oriDbgkForwardException = (ULONG64)pDbgkForwardException;
 	st = PHHook(pDbgkForwardException, proxyDbgkForwardException);
+	if (NT_SUCCESS(st))
+	{
+		DbgPrint("PHHook DbgkForwardException success\n");
+	}
+
+	
+	st = PHHook((PVOID)ntdebugactiveprocess, proxyNtDebugActiveProcess);
 	if (NT_SUCCESS(st))
 	{
 		DbgPrint("PHHook DbgkForwardException success\n");

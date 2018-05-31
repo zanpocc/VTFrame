@@ -9,7 +9,7 @@
 #define EPT_TABLE_ORDER     9
 
 //物理内存大小,此处内存应该大于物理内存的大小,否则会卡死
-#define EPT_MEMORY_SIZE 8
+#define EPT_MEMORY_SIZE 10
 
 
 
@@ -41,7 +41,7 @@ typedef union _EPT_VIOLATION_DATA
 		ULONG64 PTEWrite : 1;       // PTE entry has write access
 		ULONG64 PTEExecute : 1;     // PTE entry has execute access
 		ULONG64 Reserved1 : 1;      // 
-		ULONG64 GuestLinear : 1;    // GUEST_LINEAR_ADDRESS field is valid
+		ULONG64 GuestLinear : 1;    // 是否是因为线性地址的转换造成的VM-EXIT	bit7
 		ULONG64 FailType : 1;       // 
 		ULONG64 Reserved2 : 3;      // 
 		ULONG64 NMIBlock : 1;       // NMI unblocking due to IRET
@@ -91,6 +91,7 @@ inline ULONG64 EptpTableOffset(IN ULONG64 pfn, IN CHAR level);
 VOID VmExitEptViolation(IN PGUEST_STATE GuestState);
 VOID VmExitEptMisconfig(IN PGUEST_STATE GuestState);
 VOID PteModify(ULONG64 data, ULONG64 code);
+VOID UnPteModify(ULONG64 data);
 VOID VmExitMTF(IN PGUEST_STATE GuestState);
 extern inline VOID ToggleMTF(IN BOOLEAN State);
 

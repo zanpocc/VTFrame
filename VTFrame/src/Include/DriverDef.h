@@ -4,12 +4,15 @@
 #include "../IDT/idt.h"
 #include "../CallBack/RemoveCallBack.h"
 #include "../Test/Test.h"
+#include "../Hook/PageHook.h"
 
 
 //与应用程序通信码
 #define IOCTL_IO_TEST		CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_IO_TEST1		CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_IO_TEST2		CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_IO_TEST3		CTL_CODE(FILE_DEVICE_UNKNOWN, 0x803, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_IO_TEST4		CTL_CODE(FILE_DEVICE_UNKNOWN, 0x804, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
 //驱动和符号链接的名字
 #pragma warning(disable:4129)
@@ -93,26 +96,36 @@ NTSTATUS DEVICE_CONTROL_DISPATCH(PDEVICE_OBJECT  DeviceObject, PIRP Irp)
 
 	switch (uControlCode)
 	{
-		//冰冻
+	//f1
 	case IOCTL_IO_TEST:
-	{
-		
-
-		//使进程线程回调失效
-		EnableObType(*PsProcessType,FALSE);
-		EnableObType(*PsThreadType, FALSE);
-		
+	{	
+		DbgPrint("卡邮件\n");
+		ExecFun(Function1);
 		break;
 	}
-
+	//end
 	case IOCTL_IO_TEST1: 
 	{
-		
+		UnPageHook();
 		break;
 	}
+	//~
 	case IOCTL_IO_TEST2:
 	{
-		int1bool = TRUE;
+		DbgPrint("评分\n");
+		ExecFun(Function3);
+		//int1bool = TRUE;
+		break;
+	}
+	//f2
+	case IOCTL_IO_TEST3:
+	{
+		ExecFun(Function2);
+		break;
+	}
+	case IOCTL_IO_TEST4:
+	{
+		ExecFun(Function);
 		break;
 	}
 

@@ -93,18 +93,21 @@
     <OutDir>$(SolutionDir)\bin\$(Platform)\$(ConfigurationName)\</OutDir>
     <IntDir>$(SolutionDir)\obj\$(Platform)\$(ConfigurationName)\</IntDir>
     <TargetName>$(TargetName)</TargetName>
+    <IncludePath>$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win10 Debug|x64'">
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
     <OutDir>$(SolutionDir)\bin\$(Platform)\$(ConfigurationName)\</OutDir>
     <IntDir>$(SolutionDir)\obj\$(Platform)\$(ConfigurationName)\</IntDir>
     <TargetName>$(TargetName)</TargetName>
+    <IncludePath>$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win7 Release|x64'">
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
     <OutDir>$(SolutionDir)\bin\$(Platform)\$(ConfigurationName)\</OutDir>
     <IntDir>$(SolutionDir)\obj\$(Platform)\$(ConfigurationName)\</IntDir>
     <TargetName>$(TargetName)</TargetName>
+    <IncludePath>$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win7 Debug|ARM'">
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
@@ -139,6 +142,7 @@
       </CompileAsWinRT>
       <RuntimeLibrary>
       </RuntimeLibrary>
+      <PreprocessorDefinitions>_WIN7;_WIN64;_AMD64_;AMD64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <AdditionalDependencies>FltMgr.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -147,6 +151,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win10 Debug|x64'">
     <ClCompile>
       <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_WIN10;_WIN64;_AMD64_;AMD64;%(PreprocessorDefinitions);</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win7 Release|x64'">
@@ -162,6 +167,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win7 Release|x64'">
     <ClCompile>
       <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_WIN7;_WIN64;_AMD64_;AMD64;%(PreprocessorDefinitions);</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <AdditionalOptions>/INTEGRITYCHECK %(AdditionalOptions)</AdditionalOptions>

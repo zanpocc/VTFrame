@@ -147,7 +147,6 @@ BOOLEAN IsVTSupport()
 */
 VOID VmxSetupVMCS(IN PVCPU Vcpu)
 {
-
 	PKPROCESSOR_STATE state = &Vcpu->HostState;
 	VMX_GDTENTRY64 vmxGdtEntry = { 0 };
 	VMX_VM_ENTER_CONTROLS vmEnterCtlRequested = { 0 };
@@ -162,12 +161,13 @@ VOID VmxSetupVMCS(IN PVCPU Vcpu)
 	//下面两个是VM运行控制域的PIN和PROCESS字段
 	msrVmxPin.QuadPart = __readmsr(MSR_IA32_VMX_TRUE_PINBASED_CTLS);
 	msrVmxCpu.QuadPart = __readmsr(MSR_IA32_VMX_TRUE_PROCBASED_CTLS);
+	//cpu secondary
+	msrVmxSec.QuadPart = __readmsr(MSR_IA32_VMX_PROCBASED_CTLS2);
 	//VM Exit
 	msrVmxExit.QuadPart = __readmsr(MSR_IA32_VMX_TRUE_EXIT_CTLS);
 	//VM Entry
 	msrVmxEntry.QuadPart = __readmsr(MSR_IA32_VMX_TRUE_ENTRY_CTLS);
-	//下面是Win10需要支持RDTSCP指令和RDTSC指令，并对其处理必须的。。Win7可以无视
-	msrVmxSec.QuadPart = __readmsr(MSR_IA32_VMX_PROCBASED_CTLS2);
+	
 	
 	/////////////////////////////////////////////////////////////////////////////////////////////
 	////////////////虽然VMCS大部分的内容,我们都可以从MSR中读取,但是我们想要实现某些功能,还是需要自己修改开启
@@ -177,24 +177,23 @@ VOID VmxSetupVMCS(IN PVCPU Vcpu)
 	vmCpuCtlRequested.Fields.CR3LoadExiting = TRUE;//在写入CR3时发生VM-EXIT
 	//vmCpuCtlRequested.Fields.CR3StoreExiting = TRUE;//在读取CR3时发生VM-EXIT
 	vmCpuCtlRequested.Fields.ActivateSecondaryControl = TRUE;//开启次要的CPU控制
-    vmCpuCtlRequested.Fields.UseMSRBitmaps = TRUE;//启用MSR BitMap功能，
-
-	//这里如果开启需要添加对应的VM EXIT处理
-	//vmCpuCtlRequested.Fields.MovDRExiting = TRUE;//对DR寄存器的操作发生VM EXIT
+    vmCpuCtlRequested.Fields.UseMSRBitmaps = TRUE;//启用MSR BitMap功能
+	vmCpuCtlRequested.Fields.MovDRExiting = TRUE;//对DR寄存器的操作发生VM EXIT
 	
 
 	//次要的CPU控制
-	vmCpuCtl2Requested.Fields.EnableRDTSCP = TRUE;//RDTSCP指令发生VM EXIT，WIN10为FALSE将会发生异常
-	vmCpuCtl2Requested.Fields.EnableXSAVESXSTORS = TRUE;
-
+	vmCpuCtl2Requested.Fields.EnableRDTSCP = TRUE;	// for Win10
+	vmCpuCtl2Requested.Fields.EnableXSAVESXSTORS = TRUE;	// for Win10
+	vmCpuCtl2Requested.Fields.EnableINVPCID = TRUE;	// for Win10
+	//vmCpuCtl2Requested.Fields.EnableVPID = TRUE;	
 
 	//进入虚拟机控制
 	vmEnterCtlRequested.Fields.IA32eModeGuest = TRUE;//只有为TRUE时，VM ENTRY才能进入IA32E模式
+	vmEnterCtlRequested.Fields.LoadDebugControls = TRUE;	//配合DR
 
 	//退出虚拟机控制
 	vmExitCtlRequested.Fields.HostAddressSpaceSize = TRUE;//返回到IA32E模式的HOST中，64位下设置为TRUE
-
-	
+	vmExitCtlRequested.Fields.AcknowledgeInterruptOnExit = TRUE;
 	
 	//////////////////////////////////////////////////////////////////////////////////////////////
 	
@@ -372,8 +371,8 @@ VOID VmxSetupVMCS(IN PVCPU Vcpu)
 	__vmx_vmwrite(GUEST_CR0, state->SpecialRegisters.Cr0);
 
 	//CR3此处需注意这里填写的是我们开启DPC传入的参数，也就是我们此驱动程序的CR3,这里也可以直接通过__readmsr指令获取,兼容兼容兼容
-	__vmx_vmwrite(HOST_CR3, Vcpu->SystemDirectoryTableBase);
-	__vmx_vmwrite(GUEST_CR3, state->SpecialRegisters.Cr3);
+	__vmx_vmwrite(HOST_CR3,  __readcr3());
+	__vmx_vmwrite(GUEST_CR3, __readcr3());
 
 	// CR4
 	__vmx_vmwrite(HOST_CR4, state->SpecialRegisters.Cr4);
@@ -397,8 +396,10 @@ VOID VmxSetupVMCS(IN PVCPU Vcpu)
 	
 	//VMM的入口和它的堆栈
 	NT_ASSERT((KERNEL_STACK_SIZE - sizeof(CONTEXT)) % 16 == 0);
-	__vmx_vmwrite(HOST_RSP, (ULONG_PTR)Vcpu->VMMStack + KERNEL_STACK_SIZE - sizeof(CONTEXT));
-	__vmx_vmwrite(HOST_RIP, (ULONG_PTR)VmxVMEntry);
+	//
+	//__vmx_vmwrite(HOST_RSP, (ULONG_PTR)Vcpu->VMMStack + KERNEL_STACK_SIZE - sizeof(CONTEXT));
+	__vmx_vmwrite(HOST_RSP, (ULONG_PTR)Vcpu->VMMStack + KERNEL_STACK_SIZE - sizeof(VOID*)*2);
+	__vmx_vmwrite(HOST_RIP, (ULONG_PTR)AsmVmmEntryPoint);
 }
 
 
@@ -502,7 +503,7 @@ VOID VmxSubvertCPU(IN PVCPU Vcpu)
 		Vcpu->ept_PML4T = BuildEPTTable();
 
 
-		//开启EPT功能
+		////开启EPT功能
 		EptEnable(Vcpu->ept_PML4T);
 
 		//在vmlauch之前设置CPU的状态，如果开启成功，则会调到保存上下文的Native函数处，将状态改为ON
@@ -514,7 +515,7 @@ VOID VmxSubvertCPU(IN PVCPU Vcpu)
 		InterlockedIncrement(&g_data->vcpus);
 		int res = __vmx_vmlaunch();
 		
-
+		
 		//执行到这里就表示开启VT失败了,CPU个数-1
 		InterlockedDecrement(&g_data->vcpus);
 		Vcpu->VmxState = VMX_STATE_OFF;
@@ -579,7 +580,7 @@ VOID VmxInitializeCPU(IN PVCPU Vcpu, IN ULONG64 SystemDirectoryTableBase)
 	//当我们执行vmlauch导致vm entry到这里,也就是RtlCaptureContext函数的下一句
 	//因为VMCS表的GUEST_RIP是由上叙函数RtlCaptureContext保存的
 
-
+	
 	//每个CPU的结构中有一个标识CPU开启状态的变量VmxState。
 	//它的取值初始化为0，也就是VMX_STATE_OFF，在vmlauch指令执行前，他的值被赋值为VMX_STATE_TRANSITION
 	if (g_data->cpu_data[CPU_IDX].VmxState == VMX_STATE_TRANSITION)
@@ -593,13 +594,14 @@ VOID VmxInitializeCPU(IN PVCPU Vcpu, IN ULONG64 SystemDirectoryTableBase)
 	}
 	else if (g_data->cpu_data[CPU_IDX].VmxState == VMX_STATE_OFF)
 	{
+		
 		//到这里表示此CPU是还没有开启VT
 		//将CR3保存到CPU结构VCPU中
 		Vcpu->SystemDirectoryTableBase = SystemDirectoryTableBase;
 		//开启VT的主要内容，VMX颠覆CPU的政权
 		VmxSubvertCPU(Vcpu);
 	}
-
+	
 	//到这里就表示这个CPU开启VT成功了。。。。。。。
 }
 

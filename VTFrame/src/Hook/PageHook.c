@@ -7,6 +7,7 @@
 
 LIST_ENTRY g_PageList = { 0 };
 
+
 PPAGE_HOOK_ENTRY PHGetHookEntry(IN PVOID ptr)
 {
 	if (g_PageList.Flink == NULL || IsListEmpty(&g_PageList))
@@ -118,7 +119,7 @@ NTSTATUS PHHook(IN PVOID pFunc, IN PVOID pHook)
 	memcpy(CodePage + page_offset, &thunk, sizeof(thunk));
 
 	//原始和目标
-	pHookEntry->OriginalPtr = pFunc;
+	pHookEntry->OriginalPtr = 0;
 	pHookEntry->DataPageVA = PAGE_ALIGN(pFunc);
 	pHookEntry->DataPagePFN = PFN(MmGetPhysicalAddress(pFunc).QuadPart);
 	pHookEntry->CodePageVA = CodePage;
@@ -144,4 +145,180 @@ NTSTATUS PHHook(IN PVOID pFunc, IN PVOID pHook)
 	}
 
 	return STATUS_SUCCESS;
+}
+
+NTSTATUS ModifyAddressValue(PVOID address,PVOID pByte,ULONG length)
+{
+
+	PUCHAR CodePage = NULL;
+	BOOLEAN Newpage = FALSE;
+	PHYSICAL_ADDRESS phys = { 0 };
+	phys.QuadPart = MAXULONG64;
+
+
+	//是否已经HOOK了
+	PPAGE_HOOK_ENTRY pEntry = PHGetHookEntryByPage(address, DATA_PAGE);
+	if (pEntry != NULL)
+	{
+		CodePage = pEntry->CodePageVA;
+	}
+	else
+	{
+		//申请一页内存
+		CodePage = MmAllocateContiguousMemory(PAGE_SIZE, phys);
+		Newpage = TRUE;
+	}
+
+	if (CodePage == NULL)
+		return STATUS_INSUFFICIENT_RESOURCES;
+
+	//申请一个PageHookEntry结构插入到PageHook链表
+	PPAGE_HOOK_ENTRY pHookEntry = ExAllocatePoolWithTag(NonPagedPool, sizeof(PAGE_HOOK_ENTRY), 'VTF');
+	if (pHookEntry == NULL)
+		return STATUS_INSUFFICIENT_RESOURCES;
+
+	RtlZeroMemory(pHookEntry, sizeof(PAGE_HOOK_ENTRY));
+	//拷贝原始页数据到新申请的页面
+	
+	
+	RtlCopyMemory(CodePage, PAGE_ALIGN(address), PAGE_SIZE);
+
+	
+
+	//页面偏移
+	//PAGE_ALIGN宏作用其实就是取pFunc的高52位的值（将低12位清零）,这样就得到了虚拟地址的页面偏移
+	ULONG_PTR page_offset = (ULONG_PTR)address - (ULONG_PTR)PAGE_ALIGN(address);
+
+	//覆盖原页面处的内存
+	RtlCopyMemory(CodePage+page_offset, pByte, length);
+
+	//原始和目标
+	pHookEntry->OriginalPtr = address;
+	pHookEntry->DataPageVA = PAGE_ALIGN(address);
+	pHookEntry->DataPagePFN = PFN(MmGetPhysicalAddress(address).QuadPart);
+	pHookEntry->DataPhys = MmGetPhysicalAddress(address).QuadPart;
+	pHookEntry->CodePageVA = CodePage;
+	pHookEntry->CodePagePFN = PFN(MmGetPhysicalAddress(CodePage).QuadPart);
+
+	// 加入PageHook链表
+	if (g_PageList.Flink == NULL)
+		InitializeListHead(&g_PageList);
+	InsertTailList(&g_PageList, &pHookEntry->Link);
+	
+
+	// 进入VMM开启HOOK
+	if (Newpage)
+	{
+		for (int i = 0; i < KeNumberProcessors; i++)
+		{
+			KeSetSystemAffinityThread((KAFFINITY)(1 << i));
+
+			//执行指定代码
+			__vmx_vmcall(VTFrame_HOOK_PAGE, pHookEntry->DataPagePFN, pHookEntry->CodePagePFN, 0);
+
+			KeRevertToUserAffinityThread();
+		}
+	}
+
+	return STATUS_SUCCESS;
+}
+
+
+NTSTATUS ModifyAddressValue2(PVOID address, PVOID pByte, ULONG length, PVOID address1, PVOID pByte1, ULONG length1)
+{
+
+	PUCHAR CodePage = NULL;
+	BOOLEAN Newpage = FALSE;
+	PHYSICAL_ADDRESS phys = { 0 };
+	phys.QuadPart = MAXULONG64;
+
+
+	//是否已经HOOK了
+	PPAGE_HOOK_ENTRY pEntry = PHGetHookEntryByPage(address, DATA_PAGE);
+	if (pEntry != NULL)
+	{
+		CodePage = pEntry->CodePageVA;
+	}
+	else
+	{
+		//申请一页内存
+		CodePage = MmAllocateContiguousMemory(PAGE_SIZE, phys);
+		Newpage = TRUE;
+	}
+
+	if (CodePage == NULL)
+		return STATUS_INSUFFICIENT_RESOURCES;
+
+	//申请一个PageHookEntry结构插入到PageHook链表
+	PPAGE_HOOK_ENTRY pHookEntry = ExAllocatePoolWithTag(NonPagedPool, sizeof(PAGE_HOOK_ENTRY), 'VTF');
+	if (pHookEntry == NULL)
+		return STATUS_INSUFFICIENT_RESOURCES;
+
+	RtlZeroMemory(pHookEntry, sizeof(PAGE_HOOK_ENTRY));
+	//拷贝原始页数据到新申请的页面
+
+	RtlCopyMemory(CodePage, PAGE_ALIGN(address), PAGE_SIZE);
+
+	//页面偏移
+	//PAGE_ALIGN宏作用其实就是取pFunc的高52位的值（将低12位清零）,这样就得到了虚拟地址的页面偏移
+	ULONG_PTR page_offset = (ULONG_PTR)address - (ULONG_PTR)PAGE_ALIGN(address);
+	ULONG_PTR page_offset1 = (ULONG_PTR)address1 - (ULONG_PTR)PAGE_ALIGN(address1);
+
+	//覆盖原页面处的内存
+	RtlCopyMemory(CodePage + page_offset, pByte, length);
+	RtlCopyMemory(CodePage + page_offset1, pByte1, length1);
+
+	//原始和目标
+	pHookEntry->OriginalPtr = address;
+	pHookEntry->DataPageVA = PAGE_ALIGN(address);
+	pHookEntry->DataPagePFN = PFN(MmGetPhysicalAddress(address).QuadPart);
+	pHookEntry->CodePageVA = CodePage;
+	pHookEntry->CodePagePFN = PFN(MmGetPhysicalAddress(CodePage).QuadPart);
+
+	// 加入PageHook链表
+	if (g_PageList.Flink == NULL)
+		InitializeListHead(&g_PageList);
+	InsertTailList(&g_PageList, &pHookEntry->Link);
+
+
+	// 进入VMM开启HOOK
+	if (Newpage)
+	{
+		for (int i = 0; i < KeNumberProcessors; i++)
+		{
+			KeSetSystemAffinityThread((KAFFINITY)(1 << i));
+
+			//执行指定代码
+			__vmx_vmcall(VTFrame_HOOK_PAGE, pHookEntry->DataPagePFN, pHookEntry->CodePagePFN, 0);
+
+			KeRevertToUserAffinityThread();
+		}
+	}
+
+	return STATUS_SUCCESS;
+}
+
+
+NTSTATUS UnPageHook() 
+{
+	for (PLIST_ENTRY pListEntry = g_PageList.Flink; pListEntry != &g_PageList; pListEntry = pListEntry->Flink)
+	{
+		PPAGE_HOOK_ENTRY pEntry = NULL;
+		pEntry = CONTAINING_RECORD(pListEntry, PAGE_HOOK_ENTRY, Link);
+
+		for (int i = 0; i < KeNumberProcessors; i++)
+		{
+			KeSetSystemAffinityThread((KAFFINITY)(1 << i));
+
+			//执行指定代码
+			__vmx_vmcall(VTFrame_UNHOOK_PAGE, pEntry->DataPagePFN, 0, 0);
+
+			KeRevertToUserAffinityThread();
+		}
+		RemoveEntryList(pListEntry);
+		
+	}
+
+	return STATUS_SUCCESS;
+	
 }

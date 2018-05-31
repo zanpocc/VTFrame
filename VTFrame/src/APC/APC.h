@@ -17,16 +17,16 @@ typedef enum _KAPC_ENVIRONMENT {
 
 typedef struct _RWPM_INFO
 {
-	PFUNCTION fun;
-	KEVENT Event;
+	PFUNCTION fun;//需要运行的函数
+	ULONG64 ret;//传出的参数
+	KEVENT Event;//事件对象
 }RWPM_INFO, *PRWPM_INFO;
 
 
 
-BOOLEAN ExecFun(PFUNCTION pfun);
-VOID GetThreadFunAdd();
-VOID ThreadEipInsert();
-BOOLEAN ExecFun1(PVOID pfun);
+ULONG64 ExecFun(PFUNCTION pfun);
+
+
 
 NTKERNELAPI UCHAR* PsGetProcessImageFileName(PEPROCESS process);
 NTKERNELAPI NTSTATUS PsLookupProcessByProcessId(HANDLE Id, PEPROCESS *Process);
@@ -34,8 +34,8 @@ NTKERNELAPI NTSTATUS PsLookupProcessByProcessId(HANDLE Id, PEPROCESS *Process);
 NTKERNELAPI PEPROCESS IoThreadToProcess(
 	_In_ PETHREAD Thread
 );
-NTKERNELAPI NTSTATUS KeInitializeApc(__int64 a1, __int64 a2, int a3, __int64 a4, __int64 a5, __int64 a6, char a7, __int64 a8);
-NTKERNELAPI char __fastcall KeInsertQueueApc(__int64 a1, __int64 a2, __int64 a3);
+NTKERNELAPI NTSTATUS KeInitializeApc(PKAPC a1, PETHREAD a2, KAPC_ENVIRONMENT a3, PVOID a4, __int64 a5, __int64 a6, MODE a7, __int64 a8);
+NTKERNELAPI char __fastcall KeInsertQueueApc(PKAPC a1, __int64 a2, __int64 a3, __int64 a4);
 VOID __vmx_vmcall(ULONG index, ULONG64 arg1, ULONG64 arg2, ULONG64 arg3);
 
 typedef NTSTATUS (*PsSuspendThreadx)(IN PETHREAD Thread, OUT PULONG PreviousSuspendCount OPTIONAL);
@@ -52,3 +52,8 @@ PsGetContextThread(
 	__inout PCONTEXT ThreadContext,
 	__in KPROCESSOR_MODE Mode
 );
+
+VOID Function();
+VOID Function1();
+VOID Function2();
+VOID Function3();

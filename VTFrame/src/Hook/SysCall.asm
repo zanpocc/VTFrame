@@ -23,6 +23,7 @@ MAX_SYSCALL_INDEX = 1000h
 ;
 ; *********************************************************
 
+
 ;这里是我们自定义的系统调用入口,R3层的函数调用R0层的函数会通过此入口跳转
 ;syscall指令执行后到这里
 SyscallEntryPoint PROC
@@ -35,6 +36,7 @@ SyscallEntryPoint PROC
     lea         rsp, offset HookEnabled     ; RSP = &SyscallHookEnabled
     cmp         byte ptr [rsp + rax], 0     ; Is hooking enabled for this index?
     jne         KiSystemCall64_Emulate      ; NE = index is hooked
+
 SyscallEntryPoint ENDP
 
 ; *********************************************************

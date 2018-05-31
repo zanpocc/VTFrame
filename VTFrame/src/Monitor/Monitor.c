@@ -30,11 +30,6 @@ VOID MonitorDriverLoad(
 					DbgPrint("VTFrame:CPU:%d开启VT成功\n", i);
 				}
 			}
-			//开启SSDT HOOK
-			/*PrintIdt();
-			TestPageHook();
-			TestSSDTHook();*/
-			
 
 		}
 	}

@@ -1,6 +1,7 @@
 #pragma once
 #include "VMX.h"
 
+VOID AsmVmmEntryPoint();
 VOID VmxVMEntry();
 VOID VmxpResume();
 VOID VmxVMCleanup();

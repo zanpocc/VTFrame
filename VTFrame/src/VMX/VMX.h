@@ -78,6 +78,32 @@ enum _VM_EXIT_REASON
 #define TYPE_MOV_FROM_CR            1
 #define TYPE_CLTS                   2
 #define TYPE_LMSW                   3
+//DR
+#define TYPE_MOV_TO_DR              0
+#define TYPE_MOV_FROM_DR            1
+
+
+//自写一个CONTEXT
+
+typedef struct _MYCONTEXT
+{
+	ULONG64 R15;
+	ULONG64 R14;
+	ULONG64 R13;
+	ULONG64 R12;
+	ULONG64 R11;
+	ULONG64 R10;
+	ULONG64 R9;
+	ULONG64 R8;
+	ULONG64 Rdi;
+	ULONG64 Rsi;
+	ULONG64 Rbp;
+	ULONG64 Rsp;
+	ULONG64 Rbx;
+	ULONG64 Rdx;
+	ULONG64 Rcx;
+	ULONG64 Rax;
+} MYCONTEXT, *PMYCONTEXT;
 
 
 typedef struct _EPT_CTX
@@ -101,6 +127,13 @@ typedef struct _VPID_CTX
 	ULONG64 Address : 64;      // Linear address
 } VPID_CTX, *PVPID_CTX;
 
+typedef struct _InvVpidDescriptor {
+	USHORT vpid;
+	USHORT reserved1;
+	ULONG32 reserved2;
+	ULONG64 linear_address;
+}InvVpidDescriptor,PInvVpidDescriptor;
+
 typedef union _MOV_CR_QUALIFICATION
 {
 	ULONG_PTR All;
@@ -116,6 +149,19 @@ typedef union _MOV_CR_QUALIFICATION
 		ULONG Reserved3;
 	} Fields;
 } MOV_CR_QUALIFICATION, *PMOV_CR_QUALIFICATION;
+
+typedef union _MOV_DR_QUALIFICATION {
+	ULONG_PTR All;
+	struct {
+		ULONG_PTR Debugl_Register : 3;  //访问那个调试寄存器
+		ULONG_PTR Reserved1 : 1;        
+		ULONG_PTR AccessType : 1;       //0写入DR 1读取DR
+		ULONG_PTR Reserved2 : 3;        
+		ULONG_PTR Register : 4;			//使用的通用寄存器
+		ULONG_PTR Reserved3 : 20;       
+		ULONG_PTR Reserved4 : 32;       
+	} Fields;
+} MOV_DR_QUALIFICATION,*PMOV_DR_QUALIFICATION;
 
 #pragma warning(disable: 4214 4201)
 typedef struct _VMX_GDTENTRY64
@@ -246,7 +292,7 @@ typedef union _VMX_VM_ENTER_CONTROLS
 
 typedef struct _GUEST_STATE
 {
-	PCONTEXT GpRegs;
+	PMYCONTEXT GpRegs;
 	PVCPU Vcpu;
 	ULONG_PTR GuestRip;
 	ULONG_PTR GuestRsp;
@@ -335,5 +381,5 @@ VOID HvmpHVCallbackDPC(PRKDPC Dpc, PVOID Context, PVOID SystemArgument1, PVOID S
 VOID FreeGlobalData(IN PGLOBAL_DATA pData);
 VOID __vmx_vmcall(ULONG index, ULONG64 arg1, ULONG64 arg2, ULONG64 arg3);
 VOID __invept(INVEPT_TYPE type, PEPT_CTX ctx);
-VOID __invvpid(IVVPID_TYPE type, PVPID_CTX ctx);
+VOID __invvpid(IVVPID_TYPE type, PEPT_CTX ctx);
 EXTERN_C  PULONG64  BuildEPTTable();
