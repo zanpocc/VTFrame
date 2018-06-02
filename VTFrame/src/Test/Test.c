@@ -5,6 +5,7 @@
 #include "../Hook/InlineHook.h"
 #include "../Util/GetUnExportFunAddress.h"
 #include "../Debug/DebugAPI.h"
+#include "../IDT/idt.h"
 
 //根据SSDT表函数的地址获取索引
 #define SSDTIndex(ptr)              *(PULONG)((ULONG_PTR)ptr + 0x15)
@@ -110,13 +111,30 @@ MyDbgkpQueueMessage(
 
 VOID TestInlineHook() 
 {
-
 	PVOID pOri = NULL, pDbgkForwardException;
 	pDbgkForwardException = (PVOID)GetTrap03Address();
-	pOri = (PVOID)GetSubFunInFunction((PVOID)GetSubFunInFunction((PVOID)GetSubFunInFunction((PVOID)GetSSDTFunAddrress(173), 4), 0), 12);
-
+	pOri = (PVOID)GetSubFunInFunction((PVOID)GetSubFunInFunction((PVOID)GetSubFunInFunction((PVOID)GetSSDTFunAddrress(Nt_DebugActiveProcess), DbgkpPostFakeProcessCreateMessages_i), DbgkpPostFakeThreadMessages_i), DbgkpQueueMessage_i);
 	OriDbgkpQueueMessage = (OriDbgkpQueueMessagex)SetLineHook(pOri, DbgkpQueueMessage_2);
+
+	//内核API Inline Hook
 	SetLineHook(pDbgkForwardException, proxyDbgkForwardException);
+	SetLineHook(ntdebugactiveprocess, proxyNtDebugActiveProcess);
+
+	//DbgkCreateThread + 0x86 +3 = 2004 0803
+	//NtCreateUserProcess->21 PspAllocateThread ->+47c  PspUserThreadStartup ->DbgkCreateThread
+	PVOID NtCreateUserProcess = GetSSDTFunAddrress(Nt_CreateUserProcess);
+	ULONG64 PspAllocateThread = GetSubFunInFunction(NtCreateUserProcess, PspAllocateThread_i);
+	ULONG64 Traget = PspAllocateThread + 0x47c;
+	ULONG temp = *(ULONG*)(Traget + 3);
+	ULONG64 PspUserThreadStartup = Traget + temp + 7;
+	ULONG64 DbgkCreateThread = GetSubFunInFunction(PspUserThreadStartup, DbgkCreateThread_i);
+	//KiDispatchException + 2f8 + 3 = 2004 0803
+	ULONG64 KiDispatchException = GetKiDispatchExceptionAddress();
+
+	KIRQL irql = WPOFFx64();
+	*(USHORT*)(DbgkCreateThread + 0x86 + 3) = 0x0308;
+	*(USHORT*)(KiDispatchException + 0x2f8 + 3) = 0x0308;
+	WPONx64(irql);
 }
 
 VOID TestPageHook() 
@@ -139,7 +157,6 @@ VOID TestPageHook()
 	{
 		DbgPrint("PHHook DbgkForwardException success\n");
 	}
-
 	
 	st = PHHook((PVOID)ntdebugactiveprocess, proxyNtDebugActiveProcess);
 	if (NT_SUCCESS(st))

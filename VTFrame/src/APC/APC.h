@@ -2,7 +2,7 @@
 #include <ntddk.h>
 #include "../Util/GetUnExportFunAddress.h"
 
-typedef VOID(*PFUNCTION)();
+
 
 //APC读写进程内存，可过DXF内存读写
 #define MALLOC_NPP(_s)        ExAllocatePool(NonPagedPool, _s)
@@ -17,12 +17,12 @@ typedef enum _KAPC_ENVIRONMENT {
 
 typedef struct _RWPM_INFO
 {
-	PFUNCTION fun;//需要运行的函数
+	PVOID fun;//需要运行的函数
 	ULONG64 ret;//传出的参数
 	KEVENT Event;//事件对象
 }RWPM_INFO, *PRWPM_INFO;
 
-
+typedef VOID(*PFUNCTION)(PRWPM_INFO parame);
 
 ULONG64 ExecFun(PFUNCTION pfun);
 
@@ -53,7 +53,5 @@ PsGetContextThread(
 	__in KPROCESSOR_MODE Mode
 );
 
-VOID Function();
-VOID Function1();
-VOID Function2();
-VOID Function3();
+ULONG64 GetGameFakeCr3();
+ULONG64 GetGameRealCr3();

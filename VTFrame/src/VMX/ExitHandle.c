@@ -8,6 +8,7 @@
 extern ULONG64 KiSystemCall64Ptr;    // 原始的系统调用地址
 extern ULONG64 KiServiceCopyEndPtr;    // KiSystemServiceCopyEnd地址
 extern VOID SyscallEntryPoint();
+extern HANDLE GamePid;
 
 ULONG64 real_Cr3 = 0;
 ULONG64 fake_Cr3 = 0;
@@ -54,7 +55,6 @@ VOID VmExitEvent(IN PGUEST_STATE GuestState)
 	if (Event.Fields.ErrorCodeValid)
 		__vmx_vmwrite(VM_ENTRY_EXCEPTION_ERROR_CODE, ErrorCode);//写入原始错误码
 	
-
 	switch (Event.Fields.Type)
 	{
 
@@ -68,19 +68,32 @@ VOID VmExitEvent(IN PGUEST_STATE GuestState)
 			InjectEvent.Fields.Type = INTERRUPT_HARDWARE_EXCEPTION;
 			InjectEvent.Fields.DeliverErrorCode = 0;
 			InjectEvent.Fields.Valid = 1;
-			if (int1bool)
-				InjectEvent.Fields.Vector = 0x0f;
-			else
-				InjectEvent.Fields.Vector = 0x01;
-			
-			DbgPrint("VTFrame: Cr3 %p produce int 1 transfer to %p Current Eip:%p\n",VmcsRead(GUEST_CR3),0x0f,VmcsRead(GUEST_RIP));
-			__vmx_vmwrite(VM_ENTRY_INTR_INFO_FIELD, InjectEvent.All);
+			InjectEvent.Fields.Vector = 1;
 
+			if (GamePid == PsGetProcessId(PsGetCurrentProcess()))
+			{
+				//硬件断点异常
+				if (ErrorAddress == 1)
+				{
+					DbgPrint("%llx地址发生硬件断点异常\n", GuestState->GuestRip);
+					InjectEvent.Fields.Vector = 0x0f;
+				}
+
+				//单步异常
+				if (GuestState->GuestEFlags.Fields.DF == TRUE)
+				{
+					DbgPrint("调试器单步异常:%llx\n", GuestState->GuestRip);
+					InjectEvent.Fields.Vector = 0x0f;
+				}
+
+				GuestState->GuestEFlags.Fields.DF = FALSE;
+				__vmx_vmwrite(GUEST_RFLAGS, GuestState->GuestEFlags.All);
+			}
+			
+			__vmx_vmwrite(VM_ENTRY_INTR_INFO_FIELD, InjectEvent.All);
 			break;
 		}
-		
 	}
-
 }
 
 
@@ -136,7 +149,6 @@ VOID VmExitVmCall(IN PGUEST_STATE GuestState)
 			fake_Cr3 = (ULONG64)GuestState->GpRegs->R8;
 			real_Cr3 = (ULONG64)GuestState->GpRegs->Rdx;
 			cr3bool = TRUE;
-			int1bool = TRUE;
 			break;
 		}
 		default: 
@@ -251,9 +263,15 @@ VOID VmExitCR(IN PGUEST_STATE GuestState)
 				DbgPrint("cr0写入\n");
 				break;
 			case 3:
-				
+				if (cr3bool)
+				{
+					if (fake_Cr3 == *regPtr)
+					{
+						*regPtr = real_Cr3;
+					}
+				}
 				__invvpid(INV_ALL_CONTEXTS,&ctx);
-				__vmx_vmwrite(GUEST_CR3, (*regPtr & ~(1ULL << 63)));
+				__vmx_vmwrite(GUEST_CR3, *regPtr);
 				
 				break;
 			case 4:
@@ -444,7 +462,7 @@ VOID VmExitMSRWrite(IN PGUEST_STATE GuestState)
 			__writemsr(MSR_LSTAR, MsrValue.QuadPart);
 		else
 		{
-			__writemsr(MSR_LSTAR, MsrValue.QuadPart);
+			//__writemsr(MSR_LSTAR, MsrValue.QuadPart);
 			DbgPrint("对MSR_LSTAR的写入已被拦截");
 		}
 			

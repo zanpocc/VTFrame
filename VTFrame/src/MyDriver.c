@@ -30,6 +30,7 @@ VOID BypassCheckSign(PDRIVER_OBJECT pDriverObj)
 	ldr->Flags |= 0x20;
 }
 
+
 NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 {
 	NTSTATUS status;
@@ -55,7 +56,13 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 
 	
 	TestSSDTHook();
-	TestPageHook();
+	TestInlineHook();
+	//TestPageHook();
+	PrintIdt();
+	
+	//失效回调
+	EnableObType(*PsProcessType, FALSE);
+	EnableObType(*PsThreadType, FALSE);
 
 	//符号链接
 	status = CreateDeviceAndSymbol(DriverObject);
@@ -73,13 +80,6 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 
 VOID Unload(PDRIVER_OBJECT DriverObject)
 {
-	//卸载流程，先在DPC例程中调用VMCALL执行__vmx_off和一些寄存器的处理，接着释放申请的内存
-	// 此处也使用了KeSetSystemAffinityThread函数，不同时卸载,而是依次卸载
-	//removeMonitor();
-	//UnloadTest();
-	//removeDriverMonitor();
-	//removeProcessMonitor();
-
 	for (int i = 0; i < KeNumberProcessors; i++)
 	{
 		KeSetSystemAffinityThread((KAFFINITY)(1 << i));
@@ -88,7 +88,6 @@ VOID Unload(PDRIVER_OBJECT DriverObject)
 
 		KeRevertToUserAffinityThread();
 	}
-
 	FreeGlobalData(g_data);
 	DeleteDeviceAndSymbol();
 	DbgPrint("VTFrame:卸载VT成功\n");

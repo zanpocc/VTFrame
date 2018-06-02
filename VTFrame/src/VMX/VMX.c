@@ -250,9 +250,9 @@ VOID VmxSetupVMCS(IN PVCPU Vcpu)
 	*/
 
 	////转发1号异常
-	//ULONG ExceptionBitmap = 0;
-	//ExceptionBitmap |= 1 << 1;
-	//__vmx_vmwrite(EXCEPTION_BITMAP, ExceptionBitmap);
+	ULONG ExceptionBitmap = 0;
+	ExceptionBitmap |= 1 << 1;
+	__vmx_vmwrite(EXCEPTION_BITMAP, ExceptionBitmap);
 	
 
 	// If the “VMCS shadowing” VM-execution control is 1, the VMREAD and VMWRITE 
@@ -500,11 +500,11 @@ VOID VmxSubvertCPU(IN PVCPU Vcpu)
 		VmxSetupVMCS(Vcpu);
 	
 		// 构建EPT页表
-		Vcpu->ept_PML4T = BuildEPTTable();
+		//Vcpu->ept_PML4T = BuildEPTTable();
 
 
 		////开启EPT功能
-		EptEnable(Vcpu->ept_PML4T);
+		//EptEnable(Vcpu->ept_PML4T);
 
 		//在vmlauch之前设置CPU的状态，如果开启成功，则会调到保存上下文的Native函数处，将状态改为ON
 		Vcpu->VmxState = VMX_STATE_TRANSITION;

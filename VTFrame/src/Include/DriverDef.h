@@ -6,13 +6,18 @@
 #include "../Test/Test.h"
 #include "../Hook/PageHook.h"
 
+HANDLE GamePid = -1;
+ULONG64 FakeCr3 = 0;
+ULONG64 RealCr3 = 0;
 
 //与应用程序通信码
-#define IOCTL_IO_TEST		CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_IO_BYPASS		CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_IO_TEST1		CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_IO_TEST2		CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_IO_TEST3		CTL_CODE(FILE_DEVICE_UNKNOWN, 0x803, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_IO_TEST4		CTL_CODE(FILE_DEVICE_UNKNOWN, 0x804, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+#define IOCTL_IO_GAMEPID	CTL_CODE(FILE_DEVICE_UNKNOWN, 0X901, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
 //驱动和符号链接的名字
 #pragma warning(disable:4129)
@@ -96,39 +101,33 @@ NTSTATUS DEVICE_CONTROL_DISPATCH(PDEVICE_OBJECT  DeviceObject, PIRP Irp)
 
 	switch (uControlCode)
 	{
-	//f1
-	case IOCTL_IO_TEST:
-	{	
-		DbgPrint("卡邮件\n");
-		ExecFun(Function1);
+	//游戏进程ID
+	case IOCTL_IO_GAMEPID: {
+		GamePid = *(HANDLE*)pIoBuffer;
+		DbgPrint("进程PID：%d\n",GamePid);
 		break;
 	}
-	//end
-	case IOCTL_IO_TEST1: 
-	{
-		UnPageHook();
-		break;
+	case IOCTL_IO_BYPASS: {
+		//通过VT的Cr3切换解决0E Hook
+		FakeCr3 = GetGameFakeCr3();
+		RealCr3 = GetGameRealCr3();
+		if (RealCr3 != 0 && FakeCr3 != 0)
+		{
+			for (int i = 0; i < KeNumberProcessors; i++)
+			{
+				KeSetSystemAffinityThread((KAFFINITY)(1 << i));
+				__vmx_vmcall(VTFrame_Test, RealCr3, FakeCr3, 0);
+				KeRevertToUserAffinityThread();
+			}
+		}
+		else
+		{
+			DbgPrint("获取真假Cr3错误,Real:%llx,Fake:%llx\n",RealCr3,FakeCr3);
+		}
+		
 	}
-	//~
-	case IOCTL_IO_TEST2:
-	{
-		DbgPrint("评分\n");
-		ExecFun(Function3);
-		//int1bool = TRUE;
+	default:
 		break;
-	}
-	//f2
-	case IOCTL_IO_TEST3:
-	{
-		ExecFun(Function2);
-		break;
-	}
-	case IOCTL_IO_TEST4:
-	{
-		ExecFun(Function);
-		break;
-	}
-
 	}
 	if (NT_SUCCESS(status))
 		Irp->IoStatus.Information = uOutSize;

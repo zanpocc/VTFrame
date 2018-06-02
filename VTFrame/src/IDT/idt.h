@@ -44,7 +44,7 @@ void WPONx64(KIRQL irql);
 VOID PrintIdt();
 
 ULONG64 GetTrap03Address();
-
+ULONG64 GetKiDispatchExceptionAddress();
 extern ULONG64 GetSubFunInFunction2(
 	PVOID pFun, //主函数地址
 	ULONG index //函数的第几个子函数地址,从0开始

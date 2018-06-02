@@ -709,10 +709,10 @@ typedef struct _PS_PROCESS_WAKE_INFORMATION   // 4 elements, 0x30 bytes (sizeof)
 }PS_PROCESS_WAKE_INFORMATION, *PPS_PROCESS_WAKE_INFORMATION;
 
 
-typedef struct _WNF_STATE_NAME // 1 elements, 0x8 bytes (sizeof) 
+typedef struct _WNF_STATE_NAME_2 // 1 elements, 0x8 bytes (sizeof) 
 {
 	/*0x000*/     ULONG32      Data[2];
-}WNF_STATE_NAME, *PWNF_STATE_NAME;
+}WNF_STATE_NAME_2, *PWNF_STATE_NAME_2;
 
 
 typedef union _PS_INTERLOCKED_TIMER_DELAY_VALUES // 7 elements, 0x8 bytes (sizeof) 
@@ -1220,7 +1220,7 @@ typedef struct _EPROCESS                                               // 223 el
 	/*0x7D0*/     struct _LIST_ENTRY VirtualTimerListHead;                           // 2 elements, 0x10 bytes (sizeof)    
 	union                                                              // 2 elements, 0x30 bytes (sizeof)    
 	{
-		/*0x7E0*/         struct _WNF_STATE_NAME WakeChannel;                            // 1 elements, 0x8 bytes (sizeof)     
+		/*0x7E0*/         struct _WNF_STATE_NAME_2 WakeChannel;                            // 1 elements, 0x8 bytes (sizeof)     
 		/*0x7E0*/         struct _PS_PROCESS_WAKE_INFORMATION WakeInfo;                  // 4 elements, 0x30 bytes (sizeof)    
 	};
 	union                                                              // 2 elements, 0x4 bytes (sizeof)     
