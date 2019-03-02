@@ -190,24 +190,9 @@ VOID VmExitEptViolation(IN PGUEST_STATE GuestState)
 		pEntry = CONTAINING_RECORD(pListEntry, PAGE_HOOK_ENTRY, Link);
 		if (pEntry->DataPagePFN == pfn)
 		{
-			
+			//读取原始页面，写入和执行修改后的页面
 			if (pViolationData->Fields.Read)
 			{
-				/*ULONG64 phys = pEntry->CodePagePFN;
-				if (GuestState->LinearAddress >= pEntry->OriginalPtr && GuestState->LinearAddress <= (ULONG_PTR)pEntry->OriginalPtr + 10)
-				{
-					DbgPrint("%llx正在对%llx进行读取\n", GuestState->GuestRip, GuestState->LinearAddress);
-					if (GuestState->GuestRip = (ULONG64)Function2 && GuestState->GuestRip <= (ULONG64)Function2 + 0x1000)
-					{
-						phys = pEntry->CodePagePFN;
-					}
-				}
-
-				if (pEntry->OriginalPtr == 0)
-				{
-					phys = pEntry->DataPagePFN;
-				}*/
-
 				PEPT_PTE_ENTRY pte = GetPteEntry(pfn);
 				pte->Fields.Read = 1;
 				pte->Fields.Write = 1;
@@ -217,20 +202,6 @@ VOID VmExitEptViolation(IN PGUEST_STATE GuestState)
 			else if (pViolationData->Fields.Write)
 			{
 				ULONG64 phys = pEntry->CodePagePFN;
-				/*if (GuestState->LinearAddress >= pEntry->OriginalPtr && GuestState->LinearAddress <= (ULONG_PTR)pEntry->OriginalPtr + 10)
-				{
-					DbgPrint("%llx正在对%llx进行写入\n", GuestState->GuestRip, GuestState->LinearAddress);
-					if (GuestState->GuestRip = (ULONG64)Function2 && GuestState->GuestRip <= (ULONG64)Function2 + 0x1000)
-					{
-						phys = pEntry->CodePagePFN;
-					}
-				}
-
-				if (pEntry->OriginalPtr == 0)
-				{
-					phys = pEntry->DataPagePFN;
-				}
-*/
 				PEPT_PTE_ENTRY pte = GetPteEntry(pfn);
 				pte->Fields.Read = 1;
 				pte->Fields.Write = 1;

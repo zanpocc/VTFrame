@@ -24,7 +24,8 @@ typedef struct _RWPM_INFO
 
 typedef VOID(*PFUNCTION)(PRWPM_INFO parame);
 
-ULONG64 ExecFun(PFUNCTION pfun);
+ULONG64 ExecFun(PFUNCTION pfun, ULONG p);
+VOID HookEpt(PRWPM_INFO parame);
 
 
 

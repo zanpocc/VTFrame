@@ -33,14 +33,12 @@ inline VOID ToggleMTF(IN BOOLEAN State)
 	__vmx_vmwrite(CPU_BASED_VM_EXEC_CONTROL, vmCpuCtlRequested.All);
 }
 
-
 VOID VmExitEvent(IN PGUEST_STATE GuestState)
 {
 	UNREFERENCED_PARAMETER(GuestState);
 	INTERRUPT_INFO_FIELD Event = { 0 };
 	ULONG64 ErrorCode = 0,ErrorAddress = 0;
-//	ULONG InstructionLength = (ULONG)VmcsRead(VM_EXIT_INSTRUCTION_LEN);
-	
+	ULONG InstructionLength = (ULONG)VmcsRead(VM_EXIT_INSTRUCTION_LEN);
 
 	//读取错误信息
 	Event.All = (ULONG32)VmcsRead(VM_EXIT_INTR_INFO);
@@ -72,20 +70,19 @@ VOID VmExitEvent(IN PGUEST_STATE GuestState)
 
 			if (GamePid == PsGetProcessId(PsGetCurrentProcess()))
 			{
-				//硬件断点异常
-				if (ErrorAddress == 1)
-				{
-					DbgPrint("%llx地址发生硬件断点异常\n", GuestState->GuestRip);
+				//配合调试器单步时设置下DF位（指明是调试器设置的单步异常）
+				if (GuestState->GuestEFlags.Fields.DF == TRUE) {//单步异常
+					DbgPrint("单步异常\n");
 					InjectEvent.Fields.Vector = 0x0f;
-				}
-
-				//单步异常
-				if (GuestState->GuestEFlags.Fields.DF == TRUE)
+				}else if (ErrorAddress == 1)//硬件断点判断
 				{
-					DbgPrint("调试器单步异常:%llx\n", GuestState->GuestRip);
+					//要修正DR，不知道怎么弄
 					InjectEvent.Fields.Vector = 0x0f;
+					ULONG64 dr6 = __readdr(6);
+					dr6 |= 1 << 0;
+					DbgPrint("硬件断点触发 at %llx\n", GuestState->GuestRip);
 				}
-
+				
 				GuestState->GuestEFlags.Fields.DF = FALSE;
 				__vmx_vmwrite(GUEST_RFLAGS, GuestState->GuestEFlags.All);
 			}
@@ -95,7 +92,6 @@ VOID VmExitEvent(IN PGUEST_STATE GuestState)
 		}
 	}
 }
-
 
 VOID VmExitVmCall(IN PGUEST_STATE GuestState)
 {
@@ -149,6 +145,15 @@ VOID VmExitVmCall(IN PGUEST_STATE GuestState)
 			fake_Cr3 = (ULONG64)GuestState->GpRegs->R8;
 			real_Cr3 = (ULONG64)GuestState->GpRegs->Rdx;
 			cr3bool = TRUE;
+			break;
+		}
+		//关闭
+		case VTFrame_Test2:
+		{
+			//暂做测试DXF CR3切换
+			fake_Cr3 = 0;
+			real_Cr3 = 0;
+			cr3bool = FALSE;
 			break;
 		}
 		default: 
@@ -332,6 +337,7 @@ VOID VmExitDR(IN PGUEST_STATE GuestState)
 	switch (data->Fields.AccessType)
 	{
 		case TYPE_MOV_TO_DR:
+			//DbgPrint("对DR%d进行写入:%llx\n", data->Fields.Debugl_Register, *regPtr);
 			switch (data->Fields.Debugl_Register)
 			{
 			case 0: __writedr(0, *regPtr); break;;
@@ -347,6 +353,7 @@ VOID VmExitDR(IN PGUEST_STATE GuestState)
 			break;
 		
 		case TYPE_MOV_FROM_DR:
+			//DbgPrint("对DR%d进行读取\n", data->Fields.Debugl_Register);
 			switch (data->Fields.Debugl_Register)
 			{
 			case 0: *regPtr = __readdr(0); break;
@@ -462,10 +469,8 @@ VOID VmExitMSRWrite(IN PGUEST_STATE GuestState)
 			__writemsr(MSR_LSTAR, MsrValue.QuadPart);
 		else
 		{
-			//__writemsr(MSR_LSTAR, MsrValue.QuadPart);
 			DbgPrint("对MSR_LSTAR的写入已被拦截");
 		}
-			
 		break;
 	case MSR_GS_BASE:
 		__vmx_vmwrite(GUEST_GS_BASE, MsrValue.QuadPart);
@@ -517,9 +522,6 @@ EXTERN_C VOID VmxpExitHandler(IN PMYCONTEXT Context)
 
 	//提升IRQL到最高，VMM需要有最高等级的CPU控制权
 	KeRaiseIrql(HIGH_LEVEL, &guestContext.GuestIrql);
-
-	//因为调用了Native函数，所以原始的RCX在堆栈中，将它获取出来
-	Context->Rcx = *(PULONG64)((ULONG_PTR)Context + sizeof(MYCONTEXT) - sizeof(ULONG64)*2);
 
 	PVCPU Vcpu = &g_data->cpu_data[CPU_IDX];
 

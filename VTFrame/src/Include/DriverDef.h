@@ -21,8 +21,8 @@ ULONG64 RealCr3 = 0;
 
 //驱动和符号链接的名字
 #pragma warning(disable:4129)
-#define DEVICE_NAME L"\\Device\\Zanpo"
-#define SYMBOL_LINK L"\\\DosDevices\\Zanpo"
+#define DEVICE_NAME L"\\Device\\zanpo"
+#define SYMBOL_LINK L"\\\DosDevices\\zanpo"
 
 //EPROCESS结构偏移
 #define SeAuditProcessCreationInfoOffset 0x390     //EPROCESS->SeAuditProcessCreationInfoOffset
@@ -76,7 +76,7 @@ NTSTATUS DeleteDeviceAndSymbol()
 //如果应用程序打开此驱动的符号链接，完成并返回成功
 NTSTATUS CREATE_DISPATCH(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
-	KdPrint(("Entry CREATE_DISPATCH\n"));
+	KdPrint(("打开驱动成功\n"));
 	Irp->IoStatus.Status = STATUS_SUCCESS;
 	Irp->IoStatus.Information = 0;
 	IoCompleteRequest(Irp, IO_NO_INCREMENT);
@@ -91,7 +91,6 @@ NTSTATUS DEVICE_CONTROL_DISPATCH(PDEVICE_OBJECT  DeviceObject, PIRP Irp)
 	ULONG uControlCode, uInSize, uOutSize;
 	PVOID pIoBuffer;
 	PIO_STACK_LOCATION pStack;
-
 	//获取必要的信息，1.缓冲区指针 2.输入输出长度 3.控制码
 	pStack = IoGetCurrentIrpStackLocation(Irp);
 	pIoBuffer = Irp->AssociatedIrp.SystemBuffer;
@@ -101,31 +100,52 @@ NTSTATUS DEVICE_CONTROL_DISPATCH(PDEVICE_OBJECT  DeviceObject, PIRP Irp)
 
 	switch (uControlCode)
 	{
-	//游戏进程ID
-	case IOCTL_IO_GAMEPID: {
-		GamePid = *(HANDLE*)pIoBuffer;
-		DbgPrint("进程PID：%d\n",GamePid);
-		break;
-	}
-	case IOCTL_IO_BYPASS: {
-		//通过VT的Cr3切换解决0E Hook
-		FakeCr3 = GetGameFakeCr3();
-		RealCr3 = GetGameRealCr3();
-		if (RealCr3 != 0 && FakeCr3 != 0)
-		{
+		//游戏进程ID
+		case IOCTL_IO_GAMEPID: 
+			GamePid = *(HANDLE*)pIoBuffer;
+			DbgPrint("进程PID：%d\n",GamePid);
+			break;
+	
+		case IOCTL_IO_BYPASS: 
+			DbgPrint("IOCTL_IO_BYPASS\n");
+			//通过VT的Cr3切换解决0E Hook
+			FakeCr3 = GetGameFakeCr3();
+			RealCr3 = GetGameRealCr3();
+			if (RealCr3 != 0 && FakeCr3 != 0)
+			{
+				if (RealCr3 != FakeCr3)
+				{
+					for (int i = 0; i < KeNumberProcessors; i++)
+					{
+						KeSetSystemAffinityThread((KAFFINITY)(1 << i));
+						__vmx_vmcall(VTFrame_Test, RealCr3, FakeCr3, 0);
+						KeRevertToUserAffinityThread();
+					}
+					DbgPrint("fuck TP 0E成功\n");
+				}
+				
+			}
+			else
+			{
+				DbgPrint("获取真假Cr3错误,Real:%llx,Fake:%llx\n",RealCr3,FakeCr3);
+			}
+			break;
+		case IOCTL_IO_TEST3: 
+			DbgPrint("取消Hook\n");
+			GamePid = 0;
 			for (int i = 0; i < KeNumberProcessors; i++)
 			{
 				KeSetSystemAffinityThread((KAFFINITY)(1 << i));
-				__vmx_vmcall(VTFrame_Test, RealCr3, FakeCr3, 0);
+				__vmx_vmcall(VTFrame_Test2, RealCr3, FakeCr3, 0);
 				KeRevertToUserAffinityThread();
 			}
+			break;
+		case IOCTL_IO_TEST4:{
+			//拿到待Hook地址
+			ULONG address = *(ULONG*)pIoBuffer;
+			ExecFun(HookEpt,address);
+			break;
 		}
-		else
-		{
-			DbgPrint("获取真假Cr3错误,Real:%llx,Fake:%llx\n",RealCr3,FakeCr3);
-		}
-		
-	}
 	default:
 		break;
 	}

@@ -1,4 +1,4 @@
-#include <ntddk.h>
+ï»¿#include <ntddk.h>
 #include "VMX/VMX.h"
 #include "Test/Test.h"
 #include "Monitor/Monitor.h"
@@ -6,9 +6,10 @@
 #include "IDT/idt.h"
 
 VOID Unload(PDRIVER_OBJECT DriverObject);
+extern LIST_ENTRY g_PageList;
 
 
-//ÈÃÇı¶¯¿ÉÒÔ´´½¨»Øµ÷
+//è®©é©±åŠ¨å¯ä»¥åˆ›å»ºå›è°ƒ
 VOID BypassCheckSign(PDRIVER_OBJECT pDriverObj)
 {
 	//STRUCT FOR WIN64
@@ -31,40 +32,89 @@ VOID BypassCheckSign(PDRIVER_OBJECT pDriverObj)
 }
 
 
+VOID MyCreateProcessNotifyEx
+(
+	__inout   PEPROCESS Process,
+	__in      HANDLE ProcessId,
+	__in_opt  PPS_CREATE_NOTIFY_INFO CreateInfo
+)
+{
+	NTSTATUS st = 0;
+	HANDLE hProcess = NULL;
+	OBJECT_ATTRIBUTES oa = { 0 };
+	CLIENT_ID ClientId = { 0 };
+	char xxx[16] = { 0 };
+	if (CreateInfo == NULL)	
+	{
+		if (GamePid == ProcessId)
+		{
+			DbgPrint("æ¸¸æˆè¿›ç¨‹é€€å‡º,å¼€å§‹æ¸…ç†å·¥ä½œ\n");
+			GamePid = 0;
+			for (int i = 0; i < KeNumberProcessors; i++)
+			{
+				KeSetSystemAffinityThread((KAFFINITY)(1 << i));
+				__vmx_vmcall(VTFrame_Test2, RealCr3, FakeCr3, 0);
+				KeRevertToUserAffinityThread();
+			}
+			//å–æ¶ˆEPT Hook
+			/*for (PLIST_ENTRY pListEntry = g_PageList.Flink; pListEntry != &g_PageList; pListEntry = pListEntry->Flink) {
+				PPAGE_HOOK_ENTRY pEntry = NULL;
+				pEntry = CONTAINING_RECORD(pListEntry, PAGE_HOOK_ENTRY, Link);
+
+				for (int i = 0; i < KeNumberProcessors; i++)
+				{
+					KeSetSystemAffinityThread((KAFFINITY)(1 << i));
+					__vmx_vmcall(VTFrame_Test2, pEntry->DataPagePFN,0, 0);
+					KeRevertToUserAffinityThread();
+				}
+				
+			}
+			g_PageList.Flink = NULL;*/
+		}
+		
+	}
+}
+
 NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 {
 	NTSTATUS status;
 
-	// ²éÑ¯Ó²¼şÊÇ·ñÖ§³ÖVT
+	// æŸ¥è¯¢ç¡¬ä»¶æ˜¯å¦æ”¯æŒVT
 	if (!IsVTSupport())
 		return STATUS_UNSUCCESSFUL;
 
-	// ÉêÇëÈ«¾Ö±äÁ¿µÄÄÚ´æ
+	// ç”³è¯·å…¨å±€å˜é‡çš„å†…å­˜
 	if (!AllocGlobalMemory())
 		return STATUS_UNSUCCESSFUL;
 
-	// ¿ªÆôVTÖ÷Òª´úÂë
+	// å¼€å¯VTä¸»è¦ä»£ç 
 	if (!StartVT())
 		return STATUS_UNSUCCESSFUL;
 
-	// ÊÇ·ñ¿ªÆôVT³É¹¦
+	// æ˜¯å¦å¼€å¯VTæˆåŠŸ
 	for (int i = 0; i <= (g_data->vcpus - 1); i++)
 	{
 		if (g_data->cpu_data[i].VmxState == VMX_STATE_ON)
-			DbgPrint("VTFrame:CPU:%d¿ªÆôVT³É¹¦\n", i);
+			DbgPrint("VTFrame:CPU:%då¼€å¯VTæˆåŠŸ\n", i);
 	}
 
 	
 	TestSSDTHook();
 	TestInlineHook();
-	//TestPageHook();
 	PrintIdt();
-	
-	//Ê§Ğ§»Øµ÷
+
+	//TestPageHook();
+	//å¤±æ•ˆå›è°ƒ
 	EnableObType(*PsProcessType, FALSE);
 	EnableObType(*PsThreadType, FALSE);
 
-	//·ûºÅÁ´½Ó
+	BypassCheckSign(DriverObject);
+	//å¼€ä¸ªå›è°ƒç›‘æ§æ¸¸æˆè¿›ç¨‹é€€å‡º,è¿›è¡Œæ¸…ç†å·¥ä½œ
+	status = PsSetCreateProcessNotifyRoutineEx((PCREATE_PROCESS_NOTIFY_ROUTINE_EX)MyCreateProcessNotifyEx, FALSE);
+	DbgPrint("PsSetCreateProcessNotifyRoutineEx return: %x", status);
+
+
+	//ç¬¦å·é“¾æ¥
 	status = CreateDeviceAndSymbol(DriverObject);
 	if (!NT_SUCCESS(status))
 		return status;
@@ -73,8 +123,6 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 	DriverObject->MajorFunction[IRP_MJ_CREATE] = CREATE_DISPATCH;
 	DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = DEVICE_CONTROL_DISPATCH;
 	DriverObject->DriverUnload = Unload;
-	
-
 	return status;
 }
 
@@ -90,6 +138,6 @@ VOID Unload(PDRIVER_OBJECT DriverObject)
 	}
 	FreeGlobalData(g_data);
 	DeleteDeviceAndSymbol();
-	DbgPrint("VTFrame:Ğ¶ÔØVT³É¹¦\n");
+	DbgPrint("VTFrame:å¸è½½VTæˆåŠŸ\n");
 	DbgPrint("VTFrame:Driver Unload\n");
 }

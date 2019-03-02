@@ -98,7 +98,7 @@ NTSTATUS InsertKernelApc(PETHREAD Thread, PRWPM_INFO pInfo)
 	return st;
 }
 
-ULONG64 ExecFun(PFUNCTION pfun)
+ULONG64 ExecFun(PFUNCTION pfun,ULONG p)
 {
 	ULONG i;
 	ULONG64 ret = 0;
@@ -120,6 +120,7 @@ ULONG64 ExecFun(PFUNCTION pfun)
 			{
 				PRWPM_INFO pInfo = MALLOC_NPP(sizeof(RWPM_INFO));
 				pInfo->fun = pfun;
+				pInfo->ret = p;
 				if (NT_SUCCESS(InsertKernelApc(ethrd, pInfo)))
 				{
 					FREE(pInfo);
@@ -143,9 +144,13 @@ VOID Empty(PRWPM_INFO parame) {
 	parame->ret = __readcr3();
 }
 
+VOID HookEpt(PRWPM_INFO parame) {
+	ModifyAddressValue(parame->ret);
+}
+
 ULONG64 GetGameRealCr3()
 {
-	return ExecFun(Empty);
+	return ExecFun(Empty,0);
 }
 
 

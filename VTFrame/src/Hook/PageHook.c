@@ -147,7 +147,10 @@ NTSTATUS PHHook(IN PVOID pFunc, IN PVOID pHook)
 	return STATUS_SUCCESS;
 }
 
-NTSTATUS ModifyAddressValue(PVOID address,PVOID pByte,ULONG length)
+/**
+ * 修改虚拟地址处的EPT页面，读取会读取原来的页面，我们修改后的页面不会被CRC
+ */
+NTSTATUS ModifyAddressValue(PVOID address)
 {
 
 	PUCHAR CodePage = NULL;
@@ -178,19 +181,9 @@ NTSTATUS ModifyAddressValue(PVOID address,PVOID pByte,ULONG length)
 		return STATUS_INSUFFICIENT_RESOURCES;
 
 	RtlZeroMemory(pHookEntry, sizeof(PAGE_HOOK_ENTRY));
+
 	//拷贝原始页数据到新申请的页面
-	
-	
 	RtlCopyMemory(CodePage, PAGE_ALIGN(address), PAGE_SIZE);
-
-	
-
-	//页面偏移
-	//PAGE_ALIGN宏作用其实就是取pFunc的高52位的值（将低12位清零）,这样就得到了虚拟地址的页面偏移
-	ULONG_PTR page_offset = (ULONG_PTR)address - (ULONG_PTR)PAGE_ALIGN(address);
-
-	//覆盖原页面处的内存
-	RtlCopyMemory(CodePage+page_offset, pByte, length);
 
 	//原始和目标
 	pHookEntry->OriginalPtr = address;

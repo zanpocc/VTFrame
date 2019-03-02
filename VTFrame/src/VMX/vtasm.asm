@@ -65,13 +65,13 @@ ENDM
 AsmVmmEntryPoint PROC
 
 	;保存一下通用寄存器
-    PUSHAQ                  ; -8 * 16
+    PUSHAQ                  ; -8 * 16=80H
 
 	;rcx就是通用寄存器结构MYCONTEXT结构的指针了，传到VmxpExitHandler
     mov rcx, rsp
 
     ; 保存一下易失寄存器xmm0-xmm5
-    sub rsp, 60h
+    sub rsp, 60h		;10h*6=60h
     movaps xmmword ptr [rsp +  0h], xmm0
     movaps xmmword ptr [rsp + 10h], xmm1
     movaps xmmword ptr [rsp + 20h], xmm2

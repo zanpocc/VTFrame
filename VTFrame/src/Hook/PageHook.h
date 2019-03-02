@@ -32,5 +32,5 @@ typedef struct _PAGE_HOOK_ENTRY
 NTSTATUS UnPageHook();
 NTSTATUS PHHook(IN PVOID pFunc, IN PVOID pHook);
 PPAGE_HOOK_ENTRY PHGetHookEntry(IN PVOID ptr);
-NTSTATUS ModifyAddressValue(PVOID address, PVOID pByte, ULONG length);
+NTSTATUS ModifyAddressValue(PVOID address);
 NTSTATUS ModifyAddressValue2(PVOID address, PVOID pByte, ULONG length, PVOID address1, PVOID pByte1, ULONG length1);

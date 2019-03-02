@@ -175,7 +175,7 @@ VOID VmxSetupVMCS(IN PVCPU Vcpu)
 
 	//首要的CPU控制
 	vmCpuCtlRequested.Fields.CR3LoadExiting = TRUE;//在写入CR3时发生VM-EXIT
-	//vmCpuCtlRequested.Fields.CR3StoreExiting = TRUE;//在读取CR3时发生VM-EXIT
+	vmCpuCtlRequested.Fields.CR3StoreExiting = TRUE;//在读取CR3时发生VM-EXIT
 	vmCpuCtlRequested.Fields.ActivateSecondaryControl = TRUE;//开启次要的CPU控制
     vmCpuCtlRequested.Fields.UseMSRBitmaps = TRUE;//启用MSR BitMap功能
 	vmCpuCtlRequested.Fields.MovDRExiting = TRUE;//对DR寄存器的操作发生VM EXIT
@@ -249,7 +249,7 @@ VOID VmxSetupVMCS(IN PVCPU Vcpu)
 		PAGE_FAULT_ERROR_CODE_MATCH = 0x00004008,
 	*/
 
-	////转发1号异常
+	//转发1号异常
 	ULONG ExceptionBitmap = 0;
 	ExceptionBitmap |= 1 << 1;
 	__vmx_vmwrite(EXCEPTION_BITMAP, ExceptionBitmap);
@@ -395,9 +395,7 @@ VOID VmxSetupVMCS(IN PVCPU Vcpu)
 
 	
 	//VMM的入口和它的堆栈
-	NT_ASSERT((KERNEL_STACK_SIZE - sizeof(CONTEXT)) % 16 == 0);
-	//
-	//__vmx_vmwrite(HOST_RSP, (ULONG_PTR)Vcpu->VMMStack + KERNEL_STACK_SIZE - sizeof(CONTEXT));
+	__vmx_vmwrite(HOST_RSP, (ULONG_PTR)Vcpu->VMMStack + KERNEL_STACK_SIZE - sizeof(MYCONTEXT) - 0x80);
 	__vmx_vmwrite(HOST_RSP, (ULONG_PTR)Vcpu->VMMStack + KERNEL_STACK_SIZE - sizeof(VOID*)*2);
 	__vmx_vmwrite(HOST_RIP, (ULONG_PTR)AsmVmmEntryPoint);
 }
@@ -500,11 +498,10 @@ VOID VmxSubvertCPU(IN PVCPU Vcpu)
 		VmxSetupVMCS(Vcpu);
 	
 		// 构建EPT页表
-		//Vcpu->ept_PML4T = BuildEPTTable();
-
+		Vcpu->ept_PML4T = BuildEPTTable();
 
 		////开启EPT功能
-		//EptEnable(Vcpu->ept_PML4T);
+		EptEnable(Vcpu->ept_PML4T);
 
 		//在vmlauch之前设置CPU的状态，如果开启成功，则会调到保存上下文的Native函数处，将状态改为ON
 		Vcpu->VmxState = VMX_STATE_TRANSITION;
